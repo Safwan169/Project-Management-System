@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment — never commit real secrets; .env.example is the template.
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Uploaded files (multer destination)
+uploads/
+
+# OS / editor cruft
+.DS_Store
