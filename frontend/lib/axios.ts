@@ -2,7 +2,7 @@ import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'ax
 import toast from 'react-hot-toast';
 import type { ApiError } from '@/types';
 
-export const AUTH_TOKEN_KEY = 'mpms.token';
+export const AUTH_TOKEN_KEY = 'pms.token';
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000/api';
 

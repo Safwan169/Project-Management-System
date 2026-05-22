@@ -33,7 +33,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
-    service: 'mpms-backend',
+    service: 'pms-backend',
     environment: env.NODE_ENV,
     timestamp: new Date().toISOString(),
   });

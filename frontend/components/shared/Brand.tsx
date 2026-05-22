@@ -14,7 +14,7 @@ export function Brand({ withTagline = false, className }: BrandProps) {
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 text-white">
           <Layers className="h-5 w-5" />
         </span>
-        <span className="text-2xl font-bold tracking-tight text-foreground">MPMS</span>
+        <span className="text-2xl font-bold tracking-tight text-foreground">PMS</span>
       </div>
       {withTagline && (
         <p className="mt-2 text-sm text-muted">Plan projects, run sprints, ship work.</p>

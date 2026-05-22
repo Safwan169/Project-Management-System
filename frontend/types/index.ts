@@ -39,20 +39,43 @@ export interface Team {
   updatedAt: string;
 }
 
-export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'archived';
+export type ProjectStatus = 'planned' | 'active' | 'completed' | 'archived';
+export type ProjectMemberRole = 'manager' | 'member';
 
+// A project member entry. `user` is an id on a plain list response and a
+// populated User on the detail endpoint.
+export interface ProjectMember {
+  user: Ref<User>;
+  role: ProjectMemberRole;
+}
+
+// Mirrors the backend Project model.
 export interface Project {
   _id: ID;
-  name: string;
-  key: string;
+  title: string;
+  client: string;
   description?: string;
+  startDate: string;
+  endDate: string;
+  budget?: number;
   status: ProjectStatus;
-  team: Ref<Team>;
-  lead: Ref<User>;
-  startDate?: string;
-  dueDate?: string;
+  thumbnail?: string;
+  createdBy: Ref<User>;
+  members: ProjectMember[];
+  tags?: string[];
+  isOverdue: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// Returned by GET /api/projects/:id/stats.
+export interface ProjectStats {
+  totalTasks: number;
+  completedTasks: number;
+  progressPercent: number;
+  totalMembers: number;
+  sprintCount: number;
+  timeLogged: number;
 }
 
 export type SprintStatus = 'planned' | 'active' | 'completed';

@@ -18,7 +18,7 @@ async function start(): Promise<void> {
   await connectDB();
 
   const server = app.listen(env.PORT, () => {
-    logger.info(`mpms-backend listening on port ${env.PORT} [${env.NODE_ENV}]`);
+    logger.info(`pms-backend listening on port ${env.PORT} [${env.NODE_ENV}]`);
   });
 
   const shutdown = async (signal: string): Promise<void> => {

@@ -1,7 +1,7 @@
 {
-  "name": "mpms-backend",
+  "name": "pms-backend",
   "version": "1.0.0",
-  "description": "mpms — project management system API (Express + TypeScript + MongoDB)",
+  "description": "pms — project management system API (Express + TypeScript + MongoDB)",
   "main": "dist/server.js",
   "type": "commonjs",
   "scripts": {
