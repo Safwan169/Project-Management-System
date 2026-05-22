@@ -8,6 +8,7 @@
     "dev": "ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "seed": "ts-node-dev --transpile-only --exit-child src/utils/seed.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [

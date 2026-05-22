@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { env, isDevelopment } from './config/env';
+import { AppError } from './utils/AppError';
+import authRouter from './routes/auth';
 
 // App factory only — server.ts calls listen(), so this stays testable.
 const app: Application = express();
@@ -33,7 +35,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
-// Feature routers mount here, e.g. app.use('/api/auth', authRouter).
+app.use('/api/auth', authRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
@@ -42,6 +44,18 @@ app.use((req: Request, res: Response) => {
 // Error handler must keep all four args and stay last.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  // AppError carries an intended status code; anything else is an unexpected 500.
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({ message: err.message });
+    return;
+  }
+
+  // Duplicate-key errors from Mongo (e.g. registering an existing email).
+  if (err.name === 'MongoServerError' && (err as { code?: number }).code === 11000) {
+    res.status(409).json({ message: 'A record with these details already exists.' });
+    return;
+  }
+
   console.error('[error]', err.stack ?? err.message);
   res.status(500).json({
     message: 'Internal server error',
