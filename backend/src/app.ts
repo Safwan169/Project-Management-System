@@ -2,14 +2,18 @@ import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { MulterError } from 'multer';
 import { env, isDevelopment } from './config/env';
 import { AppError } from './utils/AppError';
 import authRouter from './routes/auth';
+import projectRouter from './routes/projects';
 
 // App factory only — server.ts calls listen(), so this stays testable.
 const app: Application = express();
 
-app.use(helmet());
+// crossOriginResourcePolicy relaxed so the frontend (a different origin)
+// can load uploaded images served from /uploads.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 app.use(
   cors({
@@ -35,7 +39,11 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+// Serve uploaded files (thumbnails, attachments) as static assets.
+app.use('/uploads', express.static('uploads'));
+
 app.use('/api/auth', authRouter);
+app.use('/api/projects', projectRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
@@ -53,6 +61,18 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   // Duplicate-key errors from Mongo (e.g. registering an existing email).
   if (err.name === 'MongoServerError' && (err as { code?: number }).code === 11000) {
     res.status(409).json({ message: 'A record with these details already exists.' });
+    return;
+  }
+
+  // multer file-size / field errors, and our fileFilter rejections.
+  if (err instanceof MulterError) {
+    const message =
+      err.code === 'LIMIT_FILE_SIZE' ? 'File is too large.' : `Upload error: ${err.message}`;
+    res.status(400).json({ message });
+    return;
+  }
+  if (err.message.startsWith('Unsupported file type')) {
+    res.status(400).json({ message: err.message });
     return;
   }
 
