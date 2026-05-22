@@ -1,8 +1,24 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/store/authStore';
+import { Spinner } from '@/components/ui/Spinner';
+
+// Entry point — sends visitors to the dashboard or login once the session
+// rehydration has resolved.
 export default function HomePage() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (isLoading) return;
+    router.replace(isAuthenticated ? '/dashboard' : '/login');
+  }, [isLoading, isAuthenticated, router]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-4 p-8">
-      <h1 className="text-balance text-4xl font-bold text-primary-700">mpms</h1>
-      <p className="text-muted">Project Management System — frontend scaffold ready.</p>
-    </main>
+    <div className="flex min-h-screen items-center justify-center bg-slate-100">
+      <Spinner size="lg" className="text-primary-600" />
+    </div>
   );
 }

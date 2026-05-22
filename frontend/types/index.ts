@@ -8,14 +8,25 @@ export type Ref<T> = ID | T;
 
 export type UserRole = 'admin' | 'manager' | 'member';
 
+// Mirrors the backend's SafeUser (password stripped).
 export interface User {
   _id: ID;
   name: string;
   email: string;
   role: UserRole;
-  avatarUrl?: string;
+  department?: string;
+  skills?: string[];
+  avatar?: string;
+  isActive: boolean;
+  lastLogin?: string;
+  fullName: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AuthResult {
+  user: User;
+  token: string;
 }
 
 export interface Team {

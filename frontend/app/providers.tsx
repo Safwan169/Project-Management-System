@@ -4,15 +4,16 @@ import { ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { getQueryClient } from '@/lib/queryClient';
+import { AuthProvider } from '@/store/authStore';
 
-// QueryClientProvider and Toaster need browser context, so they live in
-// this single client boundary rather than the server root layout.
+// QueryClientProvider, AuthProvider and Toaster need browser context, so
+// they live in this single client boundary rather than the server layout.
 export function Providers({ children }: { children: ReactNode }) {
   const queryClient = getQueryClient();
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <AuthProvider>{children}</AuthProvider>
       <Toaster
         position="top-right"
         toastOptions={{
