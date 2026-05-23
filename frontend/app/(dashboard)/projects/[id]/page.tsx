@@ -21,8 +21,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
 import { ProjectTeamTab } from '@/components/projects/ProjectTeamTab';
-import { ProjectSprintsTab } from '@/components/projects/ProjectSprintsTab';
 import { ProjectSettingsTab } from '@/components/projects/ProjectSettingsTab';
+import { SprintList } from '@/components/sprints/SprintList';
 
 type Tab = 'sprints' | 'team' | 'settings';
 
@@ -63,7 +63,7 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const { project, counts } = data;
+  const { project } = data;
   const thumb = thumbnailUrl(project.thumbnail);
 
   const tabs: { value: Tab; label: string; hidden?: boolean }[] = [
@@ -168,7 +168,7 @@ export default function ProjectDetailPage() {
       </div>
 
       <div>
-        {tab === 'sprints' && <ProjectSprintsTab sprintCount={counts.sprints} />}
+        {tab === 'sprints' && <SprintList project={project} canManage={canManage} />}
         {tab === 'team' && <ProjectTeamTab project={project} canManage={canManage} />}
         {tab === 'settings' && canManage && (
           <ProjectSettingsTab project={project} canDelete={user?.role === 'admin'} />

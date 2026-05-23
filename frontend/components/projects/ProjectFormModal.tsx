@@ -152,7 +152,7 @@ export function ProjectFormModal({ open, onClose, project }: ProjectFormModalPro
           {...register('description')}
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             type="date"
             label="Start date"
@@ -167,7 +167,7 @@ export function ProjectFormModal({ open, onClose, project }: ProjectFormModalPro
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Budget</label>
             <div className="relative">

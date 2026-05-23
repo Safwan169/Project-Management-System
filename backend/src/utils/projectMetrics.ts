@@ -48,3 +48,39 @@ export async function aggregateTasks(projectId: Types.ObjectId): Promise<TaskCou
 
   return result ?? empty;
 }
+
+// Per-sprint task counts, keyed by sprint id. Returns an empty map until
+// the Task model/collection exists.
+export async function tasksBySprint(
+  sprintIds: Types.ObjectId[],
+): Promise<Map<string, { total: number; completed: number }>> {
+  const counts = new Map<string, { total: number; completed: number }>();
+  if (sprintIds.length === 0 || !(await collectionExists('tasks'))) return counts;
+
+  const rows = await mongoose.connection
+    .db!.collection('tasks')
+    .aggregate<{ _id: Types.ObjectId; total: number; completed: number }>([
+      { $match: { sprint: { $in: sprintIds } } },
+      {
+        $group: {
+          _id: '$sprint',
+          total: { $sum: 1 },
+          completed: {
+            $sum: { $cond: [{ $in: ['$status', ['done', 'completed']] }, 1, 0] },
+          },
+        },
+      },
+    ])
+    .toArray();
+
+  for (const row of rows) {
+    counts.set(row._id.toString(), { total: row.total, completed: row.completed });
+  }
+  return counts;
+}
+
+// Task count for a single sprint — used by deleteSprint's no-tasks guard.
+export async function countTasksInSprint(sprintId: Types.ObjectId): Promise<number> {
+  if (!(await collectionExists('tasks'))) return 0;
+  return mongoose.connection.db!.collection('tasks').countDocuments({ sprint: sprintId });
+}

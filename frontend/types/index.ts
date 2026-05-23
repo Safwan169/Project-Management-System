@@ -78,16 +78,23 @@ export interface ProjectStats {
   timeLogged: number;
 }
 
-export type SprintStatus = 'planned' | 'active' | 'completed';
+export type SprintStatus = 'upcoming' | 'active' | 'completed';
 
+// Mirrors the backend Sprint model. sprintNumber and order are
+// server-assigned. taskCount/completedTaskCount are added by the list
+// endpoint's aggregation, so they're optional here.
 export interface Sprint {
   _id: ID;
-  name: string;
-  goal?: string;
-  status: SprintStatus;
+  title: string;
+  sprintNumber: number;
   project: Ref<Project>;
   startDate: string;
   endDate: string;
+  status: SprintStatus;
+  order: number;
+  goal?: string;
+  taskCount?: number;
+  completedTaskCount?: number;
   createdAt: string;
   updatedAt: string;
 }
