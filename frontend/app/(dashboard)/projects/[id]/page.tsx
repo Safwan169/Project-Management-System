@@ -23,6 +23,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { ProjectTeamTab } from '@/components/projects/ProjectTeamTab';
 import { ProjectSettingsTab } from '@/components/projects/ProjectSettingsTab';
 import { SprintList } from '@/components/sprints/SprintList';
+import { ProgressBar } from '@/components/ui/ProgressBar';
 
 type Tab = 'sprints' | 'team' | 'settings';
 
@@ -124,6 +125,12 @@ export default function ProjectDetailPage() {
             {project.description && (
               <p className="pt-1 text-sm text-foreground">{project.description}</p>
             )}
+
+            <ProgressBar
+              value={stats?.progressPercent ?? 0}
+              label="Project progress"
+              className="pt-1"
+            />
           </div>
         </div>
       </Card>

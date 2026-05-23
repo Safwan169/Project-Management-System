@@ -1,18 +1,37 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
-import type { Sprint } from '@/types';
+import type { Sprint, Task, TaskStatus, User } from '@/types';
+import { fetchTasks, updateTask } from '@/lib/tasks-api';
 import { formatDate } from '@/lib/format';
+import { useAuth } from '@/store/authStore';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
+import { Spinner } from '@/components/ui/Spinner';
 
-// Sprint status -> badge color.
 const statusColor = {
   upcoming: 'gray',
   active: 'indigo',
   completed: 'green',
 } as const;
+
+const statusOptions: { value: TaskStatus; label: string }[] = [
+  { value: 'todo', label: 'To Do' },
+  { value: 'inprogress', label: 'In Progress' },
+  { value: 'review', label: 'Review' },
+  { value: 'done', label: 'Done' },
+];
+
+const priorityBadge: Record<string, 'gray' | 'blue' | 'amber' | 'red'> = {
+  low: 'gray',
+  medium: 'blue',
+  high: 'amber',
+  critical: 'red',
+};
 
 interface SprintCardProps {
   sprint: Sprint;
@@ -23,14 +42,46 @@ interface SprintCardProps {
 
 export function SprintCard({ sprint, canManage, onEdit, onDelete }: SprintCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(canManage);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const total = sprint.taskCount ?? 0;
   const done = sprint.completedTaskCount ?? 0;
   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
+  const { data, isLoading } = useQuery({
+    queryKey: ['tasks', { sprint: sprint._id, limit: 200 }],
+    queryFn: () => fetchTasks({ sprint: sprint._id, limit: 200 }),
+    enabled: expanded,
+  });
+  const tasks = data?.tasks ?? [];
+
+  const visibleTasks = showAll
+    ? tasks
+    : tasks.filter((t) =>
+        (t.assignees as User[]).some(
+          (a) => (typeof a === 'string' ? a : a._id) === user?._id,
+        ),
+      );
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
+      updateTask(id, { status }),
+    onSuccess: (updated, { status }) => {
+      if (status === 'done' && updated.status === 'review') {
+        toast('Sent to review — a manager must approve "done".');
+      } else {
+        toast.success('Task updated');
+      }
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['sprints'] });
+    },
+  });
+
   return (
     <div className="group rounded-lg border border-surface-border bg-white">
-      {/* Header — click to expand. */}
       <div className="flex items-center gap-3 px-4 py-3">
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -57,7 +108,6 @@ export function SprintCard({ sprint, canManage, onEdit, onDelete }: SprintCardPr
             {sprint.status}
           </Badge>
 
-          {/* Task progress mini-bar. */}
           <span className="ml-auto hidden items-center gap-2 sm:flex">
             <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200">
               <span
@@ -91,19 +141,111 @@ export function SprintCard({ sprint, canManage, onEdit, onDelete }: SprintCardPr
         )}
       </div>
 
-      {/* Expanded body — task list lands here in the Tasks module. */}
       <div className={cn('border-t border-surface-border px-4 py-4', !expanded && 'hidden')}>
         {sprint.goal && (
           <p className="mb-3 text-xs text-muted">
             <span className="font-medium text-foreground">Goal:</span> {sprint.goal}
           </p>
         )}
-        <p className="rounded-md bg-surface-subtle px-3 py-4 text-center text-xs text-muted">
-          {total > 0
-            ? `${total} task(s) in this sprint — the full task list arrives in the Tasks module.`
-            : 'No tasks yet. The task board arrives in the Tasks module.'}
-        </p>
+
+        {!canManage && (
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs text-muted">
+              {showAll ? 'All tasks in this sprint' : 'Tasks assigned to you'}
+            </p>
+            <button
+              onClick={() => setShowAll((v) => !v)}
+              className="text-xs font-medium text-primary-600 hover:underline"
+            >
+              {showAll ? 'Show my tasks only' : 'Show all tasks'}
+            </button>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="flex justify-center py-6">
+            <Spinner size="sm" className="text-primary-600" />
+          </div>
+        ) : visibleTasks.length === 0 ? (
+          <p className="rounded-md bg-surface-subtle px-3 py-4 text-center text-xs text-muted">
+            {tasks.length === 0
+              ? 'No tasks in this sprint yet.'
+              : 'No tasks assigned to you in this sprint.'}
+          </p>
+        ) : (
+          <ul className="divide-y divide-surface-border rounded-md border border-surface-border">
+            {visibleTasks.map((task) => (
+              <SprintTaskRow
+                key={task._id}
+                task={task}
+                currentUserId={user?._id}
+                canManage={canManage}
+                onOpen={() => router.push(`/tasks?taskId=${task._id}`)}
+                onChangeStatus={(status) => statusMutation.mutate({ id: task._id, status })}
+              />
+            ))}
+          </ul>
+        )}
       </div>
     </div>
+  );
+}
+
+interface SprintTaskRowProps {
+  task: Task;
+  currentUserId?: string;
+  canManage: boolean;
+  onOpen: () => void;
+  onChangeStatus: (status: TaskStatus) => void;
+}
+
+function SprintTaskRow({
+  task,
+  currentUserId,
+  canManage,
+  onOpen,
+  onChangeStatus,
+}: SprintTaskRowProps) {
+  const isMine = (task.assignees as User[]).some(
+    (a) => (typeof a === 'string' ? a : a._id) === currentUserId,
+  );
+  const canChangeStatus = canManage || isMine;
+  const overdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
+
+  return (
+    <li
+      className="flex items-center gap-3 px-3 py-2 transition-colors hover:bg-surface-subtle"
+      onClick={onOpen}
+      role="button"
+    >
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+        {task.title}
+      </span>
+
+      <Badge color={priorityBadge[task.priority] ?? 'gray'}>{task.priority}</Badge>
+
+      <span
+        className={cn(
+          'hidden shrink-0 text-xs sm:inline',
+          overdue ? 'font-medium text-red-600' : 'text-muted',
+        )}
+      >
+        {task.dueDate ? formatDate(task.dueDate) : '—'}
+      </span>
+
+      <select
+        value={task.status}
+        disabled={!canChangeStatus}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => onChangeStatus(e.target.value as TaskStatus)}
+        className="h-7 shrink-0 rounded-md border border-surface-border bg-white px-2 text-xs text-foreground focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-muted"
+      >
+        {statusOptions.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+    </li>
   );
 }

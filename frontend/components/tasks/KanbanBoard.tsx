@@ -34,9 +34,16 @@ interface KanbanBoardProps {
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   onAddInColumn?: (status: TaskStatus) => void;
+  /** If true, dropping into Done is blocked client-side with a toast. */
+  blockSelfApprove?: boolean;
 }
 
-export function KanbanBoard({ tasks, onTaskClick, onAddInColumn }: KanbanBoardProps) {
+export function KanbanBoard({
+  tasks,
+  onTaskClick,
+  onAddInColumn,
+  blockSelfApprove = false,
+}: KanbanBoardProps) {
   const queryClient = useQueryClient();
   // Local copy so we can apply optimistic moves before the server confirms.
   const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
@@ -84,6 +91,10 @@ export function KanbanBoard({ tasks, onTaskClick, onAddInColumn }: KanbanBoardPr
     if (!destination) return;
     if (source.droppableId === destination.droppableId) return;
     const nextStatus = destination.droppableId as TaskStatus;
+    if (blockSelfApprove && nextStatus === 'done') {
+      toast.error('A manager must approve "done" — move to Review first.');
+      return;
+    }
     setOptimistic((prev) => ({ ...prev, [draggableId]: nextStatus }));
     mutation.mutate({ id: draggableId, status: nextStatus });
   };

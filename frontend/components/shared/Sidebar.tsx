@@ -27,6 +27,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'My Tasks', href: '/my-tasks', icon: CheckSquare },
   { label: 'Projects', href: '/projects', icon: FolderKanban },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
   { label: 'Team', href: '/team', icon: Users },
