@@ -52,7 +52,25 @@ export const sprintSchema = z
     path: ['endDate'],
   });
 
+export const taskSchema = z.object({
+  title: z.string().min(1, 'Title is required').max(160, 'Title is too long'),
+  description: z.string().optional(),
+  project: z.string().min(1, 'Project is required'),
+  sprint: z.string().min(1, 'Sprint is required'),
+  assignees: z.array(z.string()).optional(),
+  priority: z.enum(['low', 'medium', 'high', 'critical']),
+  status: z.enum(['todo', 'inprogress', 'review', 'done']),
+  dueDate: z.string().optional(),
+  // Estimate comes from a number input as a string; coerce on submit.
+  estimate: z
+    .string()
+    .optional()
+    .refine((v) => !v || Number(v) >= 0, 'Estimate cannot be negative'),
+  tags: z.string().optional(),
+});
+
 export type LoginValues = z.infer<typeof loginSchema>;
 export type RegisterValues = z.infer<typeof registerSchema>;
 export type ProjectValues = z.infer<typeof projectSchema>;
 export type SprintValues = z.infer<typeof sprintSchema>;
+export type TaskValues = z.infer<typeof taskSchema>;

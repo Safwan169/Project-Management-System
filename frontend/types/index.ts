@@ -99,23 +99,74 @@ export interface Sprint {
   updatedAt: string;
 }
 
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done';
-export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskStatus = 'todo' | 'inprogress' | 'review' | 'done';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export interface TaskAttachment {
+  _id: ID;
+  filename: string;
+  originalName: string;
+  mimetype: string;
+  size: number;
+  uploadedBy: Ref<User>;
+  uploadedAt: string;
+}
+
+export interface TaskSubtask {
+  _id: ID;
+  title: string;
+  completed: boolean;
+  createdAt: string;
+}
+
+export interface TaskTimeLog {
+  _id: ID;
+  user: Ref<User>;
+  hours: number;
+  date: string;
+  note?: string;
+}
+
+export interface TaskActivityEntry {
+  _id: ID;
+  user: Ref<User>;
+  action: string;
+  field?: string;
+  oldValue?: string;
+  newValue?: string;
+  timestamp: string;
+}
+
+export interface TaskComment {
+  _id: ID;
+  user: Ref<User>;
+  text: string;
+  createdAt: string;
+  editedAt?: string;
+  parentComment?: ID;
+  replies?: TaskComment[];
+}
 
 export interface Task {
   _id: ID;
-  key: string;
   title: string;
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
   project: Ref<Project>;
-  sprint?: Ref<Sprint> | null;
-  assignee?: Ref<User> | null;
-  reporter: Ref<User>;
+  sprint: Ref<Sprint>;
+  assignees: Ref<User>[];
+  createdBy: Ref<User>;
   estimate?: number;
-  labels: string[];
   dueDate?: string;
+  tags?: string[];
+  isBlocked: boolean;
+  blockedReason?: string;
+  attachments: TaskAttachment[];
+  subtasks: TaskSubtask[];
+  timeLogs: TaskTimeLog[];
+  activityLog: TaskActivityEntry[];
+  comments: TaskComment[];
   createdAt: string;
   updatedAt: string;
 }

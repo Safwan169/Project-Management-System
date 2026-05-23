@@ -89,7 +89,6 @@ export async function removeProjectMember(id: string, userId: string): Promise<v
   await api.delete(`/projects/${id}/members/${userId}`);
 }
 
-// Used by the Add Member modal to find users to add.
 export async function searchUsers(query: string): Promise<User[]> {
   const { data } = await api.get<Envelope<{ users: User[] }>>('/users', {
     params: { search: query },

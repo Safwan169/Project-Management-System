@@ -8,6 +8,7 @@ import { AppError } from './utils/AppError';
 import authRouter from './routes/auth';
 import projectRouter from './routes/projects';
 import taskRouter from './routes/tasks';
+import userRouter from './routes/users';
 
 const app: Application = express();
 
@@ -42,6 +43,7 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/auth', authRouter);
 app.use('/api/projects', projectRouter);
 app.use('/api/tasks', taskRouter);
+app.use('/api/users', userRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
