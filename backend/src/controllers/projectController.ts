@@ -6,12 +6,10 @@ import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { countSprints, aggregateTasks } from '../utils/projectMetrics';
 
-// Route params are typed string | string[]; normalise to a single string.
 function param(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 }
 
-// Loads a project by id, throwing 400/404 as appropriate.
 async function findProjectOr404(id: string): Promise<IProject> {
   if (!Types.ObjectId.isValid(id)) {
     throw new AppError('Invalid project id.', 400);
@@ -23,8 +21,6 @@ async function findProjectOr404(id: string): Promise<IProject> {
   return project;
 }
 
-// True if the user may edit the project: an admin, any manager, or a
-// member assigned the 'manager' role on this specific project.
 function canManageProject(project: IProject, userId: string, role: string): boolean {
   if (role === 'admin' || role === 'manager') return true;
   return project.members.some(
@@ -64,10 +60,9 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
 
-  // Built incrementally from the query params; passed straight to find().
   const filter: Record<string, unknown> = {};
 
-  // Members only see projects they created or belong to; admin/manager see all.
+  // Members only see projects they created or belong to.
   if (req.user!.role === 'member') {
     const userId = new Types.ObjectId(req.user!.id);
     filter.$or = [{ createdBy: userId }, { 'members.user': userId }];
@@ -76,10 +71,8 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
   if (status) filter.status = status;
   if (client) filter.client = client;
   if (search) {
-    // Case-insensitive match across title and client.
     const term = new RegExp(String(search).trim(), 'i');
     const searchOr = [{ title: term }, { client: term }];
-    // Combine with the member scope without clobbering it.
     if (filter.$or) {
       filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
       delete filter.$or;
@@ -141,7 +134,7 @@ export const updateProject = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('End date cannot be before the start date.', 400);
   }
 
-  // Whitelist updatable fields — never let the body overwrite createdBy.
+  // createdBy is never user-editable.
   const updatable: (keyof IProject)[] = [
     'title',
     'client',
@@ -169,9 +162,7 @@ export const deleteProject = asyncHandler(async (req: Request, res: Response) =>
   const project = await findProjectOr404(param(req.params.id));
   const projectId = project._id;
 
-  // Soft check: surface a warning when active sprints exist, but still delete.
   const sprintCount = await countSprints(projectId);
-
   await project.deleteOne();
 
   res.status(200).json({
@@ -192,7 +183,6 @@ export const uploadThumbnail = asyncHandler(async (req: Request, res: Response) 
     throw new AppError('No image file was uploaded.', 400);
   }
 
-  // Store the filename only; the file is served from /uploads/thumbnails.
   project.thumbnail = req.file.filename;
   await project.save();
 

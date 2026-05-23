@@ -7,12 +7,10 @@ import { env, isDevelopment } from './config/env';
 import { AppError } from './utils/AppError';
 import authRouter from './routes/auth';
 import projectRouter from './routes/projects';
+import taskRouter from './routes/tasks';
 
-// App factory only — server.ts calls listen(), so this stays testable.
 const app: Application = express();
 
-// crossOriginResourcePolicy relaxed so the frontend (a different origin)
-// can load uploaded images served from /uploads.
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 app.use(
@@ -26,7 +24,6 @@ if (isDevelopment) {
   app.use(morgan('dev'));
 }
 
-// 10mb leaves room for multipart metadata; multer handles the file streams.
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -39,32 +36,28 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
-// Serve uploaded files (thumbnails, attachments) as static assets.
+// Serve uploaded files.
 app.use('/uploads', express.static('uploads'));
 
 app.use('/api/auth', authRouter);
 app.use('/api/projects', projectRouter);
+app.use('/api/tasks', taskRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 
-// Error handler must keep all four args and stay last.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  // AppError carries an intended status code; anything else is an unexpected 500.
   if (err instanceof AppError) {
     res.status(err.statusCode).json({ message: err.message });
     return;
   }
 
-  // Duplicate-key errors from Mongo (e.g. registering an existing email).
   if (err.name === 'MongoServerError' && (err as { code?: number }).code === 11000) {
     res.status(409).json({ message: 'A record with these details already exists.' });
     return;
   }
 
-  // multer file-size / field errors, and our fileFilter rejections.
   if (err instanceof MulterError) {
     const message =
       err.code === 'LIMIT_FILE_SIZE' ? 'File is too large.' : `Upload error: ${err.message}`;

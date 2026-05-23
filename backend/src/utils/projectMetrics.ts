@@ -1,9 +1,6 @@
 import mongoose, { Types } from 'mongoose';
 
-// Sprint and Task models don't exist yet, so we query their collections
-// directly through the native driver. This keeps the Project module
-// working today and correct once those models are added — the collection
-// names ('sprints', 'tasks') are mongoose's default pluralization.
+// Queries collections directly so Project module works before Sprint/Task models exist.
 
 async function collectionExists(name: string): Promise<boolean> {
   const db = mongoose.connection.db;
@@ -23,8 +20,6 @@ export interface TaskCounts {
   timeLogged: number;
 }
 
-// Aggregates task totals for a project in a single pass. `timeLogged`
-// sums a `timeSpent` field if tasks carry one; otherwise it stays 0.
 export async function aggregateTasks(projectId: Types.ObjectId): Promise<TaskCounts> {
   const empty: TaskCounts = { total: 0, completed: 0, timeLogged: 0 };
   if (!(await collectionExists('tasks'))) return empty;
@@ -49,8 +44,6 @@ export async function aggregateTasks(projectId: Types.ObjectId): Promise<TaskCou
   return result ?? empty;
 }
 
-// Per-sprint task counts, keyed by sprint id. Returns an empty map until
-// the Task model/collection exists.
 export async function tasksBySprint(
   sprintIds: Types.ObjectId[],
 ): Promise<Map<string, { total: number; completed: number }>> {
@@ -79,7 +72,6 @@ export async function tasksBySprint(
   return counts;
 }
 
-// Task count for a single sprint — used by deleteSprint's no-tasks guard.
 export async function countTasksInSprint(sprintId: Types.ObjectId): Promise<number> {
   if (!(await collectionExists('tasks'))) return 0;
   return mongoose.connection.db!.collection('tasks').countDocuments({ sprint: sprintId });

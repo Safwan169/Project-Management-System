@@ -58,7 +58,6 @@ const userSchema = new Schema<IUser>(
       type: String,
       required: [true, 'Password is required'],
       minlength: [8, 'Password must be at least 8 characters'],
-      // Excluded by default so it never leaks via a plain find().
       select: false,
     },
     role: {
@@ -79,14 +78,11 @@ const userSchema = new Schema<IUser>(
   },
 );
 
-// Just the name for now; kept as a virtual so it can grow later
-// (e.g. first + last name) without touching callers.
 userSchema.virtual('fullName').get(function (this: IUser): string {
   return this.name;
 });
 
-// Hash the password before saving, but only when it actually changed.
-// Async hook: mongoose advances on resolve, so no next() needed.
+// Hash password before saving, but only when it changed.
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
   this.password = await bcrypt.hash(this.password, BCRYPT_ROUNDS);

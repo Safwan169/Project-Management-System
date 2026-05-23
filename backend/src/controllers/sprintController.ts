@@ -6,12 +6,10 @@ import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { tasksBySprint, countTasksInSprint } from '../utils/projectMetrics';
 
-// Route params are typed string | string[]; normalise to a single string.
 function param(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 }
 
-// Loads the parent project (sprints are always nested under a project).
 async function findProjectOr404(id: string): Promise<IProject> {
   if (!Types.ObjectId.isValid(id)) {
     throw new AppError('Invalid project id.', 400);
@@ -35,7 +33,6 @@ async function findSprintOr404(sprintId: string, projectId: string): Promise<ISp
   return sprint;
 }
 
-// Edit rights: an admin, any manager, or this project's own manager.
 function canManageProject(project: IProject, userId: string, role: string): boolean {
   if (role === 'admin' || role === 'manager') return true;
   return project.members.some((m) => m.user.toString() === userId && m.role === 'manager');
@@ -76,7 +73,6 @@ export const getSprints = asyncHandler(async (req: Request, res: Response) => {
 
   const sprints = await Sprint.find({ project: projectId }).sort({ order: 1 });
 
-  // Attach a task count to each sprint in one aggregate pass.
   const counts = await tasksBySprint(sprints.map((s) => s._id));
   const withCounts = sprints.map((s) => ({
     ...s.toObject(),
@@ -117,8 +113,7 @@ export const updateSprint = asyncHandler(async (req: Request, res: Response) => 
     throw new AppError('End date cannot be before the start date.', 400);
   }
 
-  // sprintNumber, project and order are not user-editable here (order has
-  // its own reorder endpoint).
+  // order has its own reorder endpoint; sprintNumber and project are immutable.
   const updatable: (keyof ISprint)[] = ['title', 'startDate', 'endDate', 'status', 'goal'];
   for (const field of updatable) {
     if (req.body[field] !== undefined) {
@@ -138,7 +133,7 @@ export const deleteSprint = asyncHandler(async (req: Request, res: Response) => 
   await findProjectOr404(projectId);
   const sprint = await findSprintOr404(param(req.params.sprintId), projectId);
 
-  // Block deletion of a sprint with tasks unless ?force=true is passed.
+  // Block deletion if tasks exist unless ?force=true.
   const force = req.query.force === 'true';
   const taskCount = await countTasksInSprint(sprint._id);
   if (taskCount > 0 && !force) {
@@ -149,7 +144,6 @@ export const deleteSprint = asyncHandler(async (req: Request, res: Response) => 
   }
 
   await sprint.deleteOne();
-
   res.status(200).json({ message: 'Sprint deleted successfully' });
 });
 
@@ -166,8 +160,7 @@ export const reorderSprints = asyncHandler(async (req: Request, res: Response) =
     throw new AppError('Provide a non-empty "sprints" array of { id, order }.', 400);
   }
 
-  // Bulk update so the whole reorder is a single round-trip. Each filter
-  // is scoped to this project so a stray id can't touch another project.
+  // Scoped to this project so a stray id can't touch another project.
   const operations = sprints.map(({ id, order }) => ({
     updateOne: {
       filter: { _id: new Types.ObjectId(id), project: project._id },

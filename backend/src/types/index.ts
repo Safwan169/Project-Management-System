@@ -6,7 +6,7 @@ export interface JwtPayload {
   role: UserRole;
 }
 
-// What protect() attaches to the request after validating the token.
+// Shape attached to req.user after the protect middleware runs.
 export interface AuthUser {
   id: string;
   role: UserRole;

@@ -51,9 +51,7 @@ const sprintSchema = new Schema<ISprint>(
 sprintSchema.index({ project: 1 });
 sprintSchema.index({ status: 1 });
 
-// Auto-number new sprints per project: count existing + 1. Runs only on
-// creation (isNew) so updates never renumber. `order` mirrors the number
-// unless it has already been set explicitly.
+// Auto-number new sprints per project; order mirrors sprintNumber unless already set.
 sprintSchema.pre('validate', async function () {
   if (!this.isNew) return;
 

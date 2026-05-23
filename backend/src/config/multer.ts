@@ -3,20 +3,17 @@ import fs from 'fs';
 import path from 'path';
 import multer, { FileFilterCallback, StorageEngine } from 'multer';
 
-const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads');
+export const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads');
 const THUMBNAIL_DIR = path.join(UPLOAD_ROOT, 'thumbnails');
-const ATTACHMENT_DIR = path.join(UPLOAD_ROOT, 'attachments');
+export const ATTACHMENT_DIR = path.join(UPLOAD_ROOT, 'attachments');
 
 const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const ATTACHMENT_MIME = [...IMAGE_MIME, 'application/pdf'];
 
-// Make sure the target folders exist before multer writes to them.
 for (const dir of [THUMBNAIL_DIR, ATTACHMENT_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-// Builds a disk storage engine for a fixed destination, with a unique,
-// extension-preserving filename so concurrent uploads never collide.
 function diskStorageFor(destination: string): StorageEngine {
   return multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, destination),
@@ -27,7 +24,6 @@ function diskStorageFor(destination: string): StorageEngine {
   });
 }
 
-// Rejects any file whose mimetype isn't in the allowed list.
 function mimeFilter(allowed: string[]) {
   return (_req: Request, file: Express.Multer.File, cb: FileFilterCallback): void => {
     if (allowed.includes(file.mimetype)) {
@@ -41,11 +37,26 @@ function mimeFilter(allowed: string[]) {
 export const uploadThumbnail = multer({
   storage: diskStorageFor(THUMBNAIL_DIR),
   fileFilter: mimeFilter(IMAGE_MIME),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
+
+// Attachment destination is per-task: uploads/attachments/:taskId/
+const taskAttachmentStorage: StorageEngine = multer.diskStorage({
+  destination: (req, _file, cb) => {
+    const raw = req.params.id;
+    const taskId = Array.isArray(raw) ? raw[0] : raw;
+    if (!taskId) return cb(new Error('Missing task id for upload destination'), '');
+    const dir = path.join(ATTACHMENT_DIR, taskId);
+    fs.mkdir(dir, { recursive: true }, (err) => cb(err, dir));
+  },
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}${path.extname(file.originalname).toLowerCase()}`);
+  },
 });
 
 export const uploadAttachment = multer({
-  storage: diskStorageFor(ATTACHMENT_DIR),
+  storage: taskAttachmentStorage,
   fileFilter: mimeFilter(ATTACHMENT_MIME),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
 });

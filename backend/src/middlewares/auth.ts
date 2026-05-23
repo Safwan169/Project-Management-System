@@ -6,8 +6,6 @@ import { User } from '../models/User';
 import { UserRole } from '../types';
 
 // Validates the Bearer token and attaches req.user.
-// Loads the user from the DB so a deactivated/deleted account is rejected
-// even while its token is still otherwise valid.
 export const protect = asyncHandler(
   async (req: Request, _res: Response, next: NextFunction) => {
     const token = extractTokenFromHeader(req);
@@ -37,9 +35,7 @@ export const protect = asyncHandler(
   },
 );
 
-// Like protect(), but does not reject when no/invalid token is present —
-// it just leaves req.user undefined. Used by routes that behave differently
-// for authenticated callers (e.g. register, where an admin may set roles).
+// Same as protect but skips rejection when no token is present.
 export const optionalAuth = asyncHandler(
   async (req: Request, _res: Response, next: NextFunction) => {
     const token = extractTokenFromHeader(req);
@@ -57,14 +53,13 @@ export const optionalAuth = asyncHandler(
         };
       }
     } catch {
-      // Ignore a bad token here — the route stays open to anonymous callers.
+      // ignore invalid token — route stays open to anonymous callers
     }
     next();
   },
 );
 
-// Allows the request through only if req.user.role is one of `roles`.
-// Must be used after protect().
+// Must be used after protect.
 export const restrictTo =
   (...roles: UserRole[]) =>
   (req: Request, _res: Response, next: NextFunction): void => {
