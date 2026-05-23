@@ -10,6 +10,7 @@ import projectRouter from './routes/projects';
 import taskRouter from './routes/tasks';
 import userRouter from './routes/users';
 import dashboardRouter from './routes/dashboard';
+import reportRouter from './routes/reports';
 
 const app: Application = express();
 
@@ -46,6 +47,7 @@ app.use('/api/projects', projectRouter);
 app.use('/api/tasks', taskRouter);
 app.use('/api/users', userRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/reports', reportRouter);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
