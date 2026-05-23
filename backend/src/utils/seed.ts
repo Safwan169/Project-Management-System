@@ -3,12 +3,12 @@ import { connectDB, disconnectDB } from '../config/db';
 import { User } from '../models/User';
 import { UserRole } from '../types';
 
-const TEST_PASSWORD = 'Test1234!';
+const TEST_PASSWORD = 'pass1234!';
 
 const seedUsers: { name: string; email: string; role: UserRole }[] = [
-  { name: 'Admin User', email: 'admin@test.com', role: 'admin' },
-  { name: 'Manager User', email: 'manager@test.com', role: 'manager' },
-  { name: 'Member User', email: 'member@test.com', role: 'member' },
+  { name: 'Admin User', email: 'admin@gmail.com', role: 'admin' },
+  { name: 'Manager User', email: 'manager@gmail.com', role: 'manager' },
+  { name: 'Member User', email: 'member@gmail.com', role: 'member' },
 ];
 
 async function seed(): Promise<void> {
