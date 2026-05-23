@@ -69,8 +69,34 @@ export const taskSchema = z.object({
   tags: z.string().optional(),
 });
 
+export const memberCreateSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required').max(80, 'Name is too long'),
+    email: z.string().min(1, 'Email is required').email('Enter a valid email'),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string().min(1, 'Please confirm the password'),
+    role: z.enum(['admin', 'manager', 'member']),
+    department: z.string().optional(),
+    skills: z.string().optional(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export const memberEditSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(80, 'Name is too long'),
+  email: z.string().min(1, 'Email is required').email('Enter a valid email'),
+  role: z.enum(['admin', 'manager', 'member']),
+  department: z.string().optional(),
+  skills: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
 export type LoginValues = z.infer<typeof loginSchema>;
 export type RegisterValues = z.infer<typeof registerSchema>;
 export type ProjectValues = z.infer<typeof projectSchema>;
 export type SprintValues = z.infer<typeof sprintSchema>;
 export type TaskValues = z.infer<typeof taskSchema>;
+export type MemberCreateValues = z.infer<typeof memberCreateSchema>;
+export type MemberEditValues = z.infer<typeof memberEditSchema>;

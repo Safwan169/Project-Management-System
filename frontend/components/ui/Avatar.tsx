@@ -1,9 +1,11 @@
 import { cn } from '@/lib/utils';
+import { avatarUrl } from '@/lib/media';
 
 const sizes = {
   sm: 'h-7 w-7 text-xs',
   md: 'h-9 w-9 text-sm',
   lg: 'h-12 w-12 text-base',
+  xl: 'h-20 w-20 text-2xl',
 } as const;
 
 function initials(name: string): string {
@@ -17,13 +19,28 @@ function initials(name: string): string {
 
 interface AvatarProps {
   name: string;
+  src?: string;
   size?: keyof typeof sizes;
   className?: string;
 }
 
-// Initials-only avatar — the backend stores avatars as filenames but we
-// don't have an avatar upload flow yet, so initials are the fallback.
-export function Avatar({ name, size = 'md', className }: AvatarProps) {
+export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
+  const url = avatarUrl(src);
+  if (url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt={name}
+        title={name}
+        className={cn(
+          'inline-block shrink-0 rounded-full bg-slate-100 object-cover ring-2 ring-white',
+          sizes[size],
+          className,
+        )}
+      />
+    );
+  }
   return (
     <span
       title={name}

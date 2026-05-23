@@ -9,3 +9,8 @@ export function thumbnailUrl(filename?: string): string | null {
   if (!filename) return null;
   return `${API_ORIGIN}/uploads/thumbnails/${filename}`;
 }
+
+export function avatarUrl(filename?: string): string | null {
+  if (!filename) return null;
+  return `${API_ORIGIN}/uploads/avatars/${filename}`;
+}

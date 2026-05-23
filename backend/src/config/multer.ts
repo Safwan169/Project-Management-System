@@ -6,11 +6,12 @@ import multer, { FileFilterCallback, StorageEngine } from 'multer';
 export const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads');
 const THUMBNAIL_DIR = path.join(UPLOAD_ROOT, 'thumbnails');
 export const ATTACHMENT_DIR = path.join(UPLOAD_ROOT, 'attachments');
+const AVATAR_DIR = path.join(UPLOAD_ROOT, 'avatars');
 
 const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const ATTACHMENT_MIME = [...IMAGE_MIME, 'application/pdf'];
 
-for (const dir of [THUMBNAIL_DIR, ATTACHMENT_DIR]) {
+for (const dir of [THUMBNAIL_DIR, ATTACHMENT_DIR, AVATAR_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -36,6 +37,12 @@ function mimeFilter(allowed: string[]) {
 
 export const uploadThumbnail = multer({
   storage: diskStorageFor(THUMBNAIL_DIR),
+  fileFilter: mimeFilter(IMAGE_MIME),
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
+
+export const uploadAvatar = multer({
+  storage: diskStorageFor(AVATAR_DIR),
   fileFilter: mimeFilter(IMAGE_MIME),
   limits: { fileSize: 2 * 1024 * 1024 },
 });

@@ -6,6 +6,8 @@ interface RegisterPayload {
   email: string;
   password: string;
   role?: UserRole;
+  department?: string;
+  skills?: string[];
 }
 
 interface LoginPayload {
