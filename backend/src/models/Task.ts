@@ -58,6 +58,7 @@ export interface ITask extends Document {
   estimate?: number;
   priority: TaskPriority;
   status: TaskStatus;
+  order: number;
   dueDate?: Date;
   attachments: Types.DocumentArray<Attachment & Types.Subdocument>;
   subtasks: Types.DocumentArray<Subtask & Types.Subdocument>;
@@ -145,6 +146,8 @@ const taskSchema = new Schema<ITask>(
       enum: ['todo', 'inprogress', 'review', 'done'],
       default: 'todo',
     },
+    // Position within its kanban column. Assigned on create; rewritten on reorder.
+    order: { type: Number, default: 0 },
     dueDate: { type: Date },
     attachments: { type: [attachmentSchema], default: [] },
     subtasks: { type: [subtaskSchema], default: [] },
@@ -162,6 +165,7 @@ taskSchema.index({ project: 1 });
 taskSchema.index({ sprint: 1 });
 taskSchema.index({ assignees: 1 });
 taskSchema.index({ status: 1 });
+taskSchema.index({ sprint: 1, status: 1, order: 1 });
 taskSchema.index({ priority: 1 });
 taskSchema.index({ dueDate: 1 });
 

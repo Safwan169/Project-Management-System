@@ -110,6 +110,16 @@ export async function updateSubtasks(id: string, batch: SubtaskBatch): Promise<v
   await api.patch(`/tasks/${id}/subtasks`, batch);
 }
 
+export interface ReorderItem {
+  id: string;
+  status: string;
+  order: number;
+}
+
+export async function reorderTasks(items: ReorderItem[]): Promise<void> {
+  await api.patch('/tasks/reorder', { items });
+}
+
 export async function fetchUsers(search?: string): Promise<User[]> {
   const { data } = await api.get<Envelope<{ users: User[] }>>('/users', {
     params: search ? { search } : undefined,

@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Calendar, ListChecks } from 'lucide-react';
+import { Plus, Calendar, MessageSquare, Paperclip, CheckSquare } from 'lucide-react';
 import {
   DragDropContext,
   Droppable,
@@ -11,24 +11,36 @@ import {
   type DropResult,
 } from '@hello-pangea/dnd';
 import type { Task, TaskStatus, TaskPriority, User } from '@/types';
-import { updateTask } from '@/lib/tasks-api';
+import { reorderTasks } from '@/lib/tasks-api';
 import { formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { AvatarStack } from '@/components/ui/Avatar';
 
-const columns: { id: TaskStatus; title: string; border: string; dot: string }[] = [
-  { id: 'todo', title: 'To Do', border: 'border-t-slate-400', dot: 'bg-slate-400' },
-  { id: 'inprogress', title: 'In Progress', border: 'border-t-blue-500', dot: 'bg-blue-500' },
-  { id: 'review', title: 'Review', border: 'border-t-amber-500', dot: 'bg-amber-500' },
-  { id: 'done', title: 'Done', border: 'border-t-emerald-500', dot: 'bg-emerald-500' },
+const columns: { id: TaskStatus; title: string; accent: string }[] = [
+  { id: 'todo', title: 'To do', accent: 'bg-slate-500' },
+  { id: 'inprogress', title: 'In progress', accent: 'bg-blue-500' },
+  { id: 'review', title: 'Review', accent: 'bg-amber-500' },
+  { id: 'done', title: 'Done', accent: 'bg-emerald-500' },
 ];
 
-const priorityDot: Record<TaskPriority, string> = {
-  low: 'bg-slate-400',
-  medium: 'bg-blue-500',
+const priorityStrip: Record<TaskPriority, string> = {
+  low: 'bg-slate-300',
+  medium: 'bg-blue-400',
   high: 'bg-amber-500',
   critical: 'bg-red-500',
 };
+
+type BoardState = Record<TaskStatus, Task[]>;
+
+function buildBoard(tasks: Task[]): BoardState {
+  const map: BoardState = { todo: [], inprogress: [], review: [], done: [] };
+  for (const t of tasks) map[t.status].push(t);
+  // Sort each column by order so the server's ordering wins on first paint.
+  (Object.keys(map) as TaskStatus[]).forEach((k) =>
+    map[k].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+  );
+  return map;
+}
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -45,87 +57,109 @@ export function KanbanBoard({
   blockSelfApprove = false,
 }: KanbanBoardProps) {
   const queryClient = useQueryClient();
-  // Local copy so we can apply optimistic moves before the server confirms.
-  const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
+  // Local board state so DnD updates feel instant; resynced from props.
+  const [board, setBoard] = useState<BoardState>(() => buildBoard(tasks));
 
-  const grouped = useMemo(() => {
-    const map: Record<TaskStatus, Task[]> = {
-      todo: [],
-      inprogress: [],
-      review: [],
-      done: [],
-    };
-    for (const task of tasks) {
-      const status = optimistic[task._id] ?? task.status;
-      map[status].push(task);
-    }
-    return map;
-  }, [tasks, optimistic]);
+  useEffect(() => {
+    setBoard(buildBoard(tasks));
+  }, [tasks]);
 
   const mutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
-      updateTask(id, { status }),
-    onSuccess: (updated, { id, status }) => {
-      // Backend may force review when moving to done; if so, show the toast.
-      if (status === 'done' && updated.status === 'review') {
-        toast('Sent to review — a manager must approve "done".');
-      }
+    mutationFn: reorderTasks,
+    onSuccess: () => {
+      // Refetch so any server-side adjustments (e.g. review-guard) show through.
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      setOptimistic((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
     },
-    onError: (_err, { id }) => {
-      setOptimistic((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+    onError: () => {
+      // Roll back to the server's view on failure.
+      setBoard(buildBoard(tasks));
+      toast.error('Could not save the new order. Try again.');
     },
   });
 
   const handleDragEnd = (result: DropResult) => {
     const { source, destination, draggableId } = result;
     if (!destination) return;
-    if (source.droppableId === destination.droppableId) return;
-    const nextStatus = destination.droppableId as TaskStatus;
-    if (blockSelfApprove && nextStatus === 'done') {
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) {
+      return;
+    }
+
+    const from = source.droppableId as TaskStatus;
+    const to = destination.droppableId as TaskStatus;
+
+    if (blockSelfApprove && to === 'done') {
       toast.error('A manager must approve "done" — move to Review first.');
       return;
     }
-    setOptimistic((prev) => ({ ...prev, [draggableId]: nextStatus }));
-    mutation.mutate({ id: draggableId, status: nextStatus });
+
+    // Compute the new board synchronously so we can derive items + toast once.
+    const next: BoardState = {
+      todo: [...board.todo],
+      inprogress: [...board.inprogress],
+      review: [...board.review],
+      done: [...board.done],
+    };
+    const [moved] = next[from].splice(source.index, 1);
+    if (!moved) return;
+    next[to].splice(destination.index, 0, { ...moved, status: to });
+
+    const items: { id: string; status: TaskStatus; order: number }[] = [];
+    const cols: TaskStatus[] = from === to ? [to] : [from, to];
+    for (const col of cols) {
+      next[col] = next[col].map((t, i) => ({ ...t, order: i, status: col }));
+      next[col].forEach((t, i) => items.push({ id: t._id, status: col, order: i }));
+    }
+
+    setBoard(next);
+    mutation.mutate(items);
+
+    if (from !== to && to === 'done') {
+      toast.success(blockSelfApprove ? 'Sent to review' : 'Marked as done');
+    }
   };
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-2 lg:overflow-visible xl:grid-cols-4">
         {columns.map((col) => (
           <Droppable droppableId={col.id} key={col.id}>
             {(provided, snapshot) => (
               <div
-                ref={provided.innerRef}
-                {...provided.droppableProps}
                 className={cn(
-                  'flex min-h-[400px] flex-col rounded-xl border border-t-4 border-surface-border bg-surface-subtle/40 transition-colors',
-                  col.border,
-                  snapshot.isDraggingOver && 'bg-primary-50/60',
+                  'flex w-[280px] shrink-0 snap-start flex-col rounded-xl bg-slate-100/80 transition-colors lg:w-auto lg:shrink',
+                  snapshot.isDraggingOver && 'bg-primary-50',
                 )}
               >
-                <div className="flex items-center justify-between px-3 py-3">
+                {/* Column header — Trello-style: title + count, nothing fancy. */}
+                <div className="flex items-center justify-between gap-2 px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <span className={cn('h-2 w-2 rounded-full', col.dot)} />
-                    <h3 className="text-sm font-semibold text-foreground">{col.title}</h3>
-                    <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-muted">
-                      {grouped[col.id].length}
+                    <span className={cn('h-2 w-2 rounded-full', col.accent)} />
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                      {col.title}
+                    </h3>
+                    <span className="text-xs font-medium text-slate-400">
+                      {board[col.id].length}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex-1 space-y-2 px-2 pb-2">
-                  {grouped[col.id].map((task, index) => (
+                {/* Cards container */}
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  className="flex flex-1 flex-col gap-2 px-2 pb-2"
+                >
+                  {board[col.id].length === 0 && !snapshot.isDraggingOver && (
+                    <div className="rounded-lg border border-dashed border-slate-200 px-3 py-6 text-center text-[11px] text-slate-400">
+                      Drop tasks here
+                    </div>
+                  )}
+
+                  {board[col.id].map((task, index) => (
                     <Draggable draggableId={task._id} index={index} key={task._id}>
                       {(dragProvided, dragSnapshot) => (
                         <div
@@ -134,10 +168,17 @@ export function KanbanBoard({
                           {...dragProvided.dragHandleProps}
                           onClick={() => onTaskClick(task)}
                           className={cn(
-                            'cursor-pointer rounded-lg border border-surface-border bg-white p-3 text-left shadow-sm transition-shadow hover:shadow-md',
-                            dragSnapshot.isDragging && 'shadow-lg ring-2 ring-primary-300',
+                            'group relative cursor-pointer overflow-hidden rounded-md bg-white text-left shadow-sm ring-1 ring-slate-200/80 transition-shadow hover:shadow-md',
+                            dragSnapshot.isDragging && 'shadow-lg ring-primary-300',
                           )}
                         >
+                          {/* Priority strip on the left edge, Trello-card-cover style. */}
+                          <span
+                            className={cn(
+                              'absolute inset-y-0 left-0 w-1',
+                              priorityStrip[task.priority],
+                            )}
+                          />
                           <TaskCardContent task={task} />
                         </div>
                       )}
@@ -149,10 +190,10 @@ export function KanbanBoard({
                 {onAddInColumn && (
                   <button
                     onClick={() => onAddInColumn(col.id)}
-                    className="mx-2 mb-2 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-surface-border bg-white/60 px-3 py-2 text-xs font-medium text-muted transition-colors hover:bg-white hover:text-foreground"
+                    className="mx-2 mb-2 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-200/60 hover:text-slate-700"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Add task
+                    Add a card
                   </button>
                 )}
               </div>
@@ -167,25 +208,19 @@ export function KanbanBoard({
 function TaskCardContent({ task }: { task: Task }) {
   const assignees = (task.assignees as User[]).filter((a) => a && typeof a === 'object');
   const overdue = task.dueDate && task.status !== 'done' && new Date(task.dueDate) < new Date();
-  const completedSubtasks = task.subtasks?.filter((s) => s.completed).length ?? 0;
-  const totalSubtasks = task.subtasks?.length ?? 0;
+  const subtasksDone = task.subtasks?.filter((s) => s.completed).length ?? 0;
+  const subtasksTotal = task.subtasks?.length ?? 0;
+  const commentCount = task.comments?.length ?? 0;
+  const attachmentCount = task.attachments?.length ?? 0;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-start gap-2">
-        <span
-          className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', priorityDot[task.priority])}
-          title={`Priority: ${task.priority}`}
-        />
-        <p className="line-clamp-2 text-sm font-medium text-foreground">{task.title}</p>
-      </div>
-
+    <div className="pl-3 pr-2.5 py-2">
       {task.tags && task.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        <div className="mb-1.5 flex flex-wrap gap-1">
           {task.tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-medium text-muted"
+              className="rounded-sm bg-slate-100 px-1.5 py-px text-[10px] font-medium text-slate-600"
             >
               {tag}
             </span>
@@ -193,31 +228,50 @@ function TaskCardContent({ task }: { task: Task }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 text-xs text-muted">
-        <div className="flex items-center gap-3">
-          {totalSubtasks > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <ListChecks className="h-3 w-3" />
-              {completedSubtasks}/{totalSubtasks}
-            </span>
-          )}
-          {task.dueDate && (
-            <span
-              className={cn(
-                'inline-flex items-center gap-1',
-                overdue && 'font-medium text-red-600',
-              )}
-            >
-              <Calendar className="h-3 w-3" />
-              {formatDate(task.dueDate)}
-            </span>
+      <p className="text-[13px] font-medium leading-snug text-slate-800">{task.title}</p>
+
+      {(task.dueDate ||
+        subtasksTotal > 0 ||
+        commentCount > 0 ||
+        attachmentCount > 0 ||
+        assignees.length > 0) && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[11px] text-slate-500">
+            {task.dueDate && (
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded px-1.5 py-0.5',
+                  overdue ? 'bg-red-50 text-red-600' : 'bg-slate-100',
+                )}
+              >
+                <Calendar className="h-3 w-3" />
+                {formatDate(task.dueDate)}
+              </span>
+            )}
+            {subtasksTotal > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <CheckSquare className="h-3 w-3" />
+                {subtasksDone}/{subtasksTotal}
+              </span>
+            )}
+            {commentCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare className="h-3 w-3" />
+                {commentCount}
+              </span>
+            )}
+            {attachmentCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Paperclip className="h-3 w-3" />
+                {attachmentCount}
+              </span>
+            )}
+          </div>
+          {assignees.length > 0 && (
+            <AvatarStack names={assignees.map((a) => a.name)} max={3} size="sm" />
           )}
         </div>
-
-        {assignees.length > 0 && (
-          <AvatarStack names={assignees.map((a) => a.name)} max={3} size="sm" />
-        )}
-      </div>
+      )}
     </div>
   );
 }

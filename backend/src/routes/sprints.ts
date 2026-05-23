@@ -8,6 +8,7 @@ import {
   reorderSprints,
 } from '../controllers/sprintController';
 import { protect, restrictTo } from '../middlewares/auth';
+import { validateObjectId } from '../middlewares/validateObjectId';
 
 // mergeParams: true so :projectId from the parent project router is visible.
 const router = Router({ mergeParams: true });
@@ -24,6 +25,7 @@ router.patch('/reorder', reorderSprints);
 
 router
   .route('/:sprintId')
+  .all(validateObjectId('sprintId'))
   .get(getSprint)
   .patch(updateSprint)
   .delete(restrictTo('admin'), deleteSprint);

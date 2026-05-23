@@ -152,6 +152,7 @@ export interface Task {
   title: string;
   description?: string;
   status: TaskStatus;
+  order: number;
   priority: TaskPriority;
   project: Ref<Project>;
   sprint: Ref<Sprint>;

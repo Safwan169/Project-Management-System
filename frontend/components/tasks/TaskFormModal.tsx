@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Search, X } from 'lucide-react';
+import { Search, X, Check } from 'lucide-react';
 import type { Task, TaskPriority, TaskStatus, User } from '@/types';
 import { taskSchema, type TaskValues } from '@/lib/validators';
 import { createTask, updateTask, fetchUsers, type TaskInput } from '@/lib/tasks-api';
@@ -293,6 +293,7 @@ interface AssigneesPickerProps {
 function AssigneesPicker({ value, onChange }: AssigneesPickerProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const { data: users = [] } = useQuery({
     queryKey: ['users', query],
@@ -300,7 +301,6 @@ function AssigneesPicker({ value, onChange }: AssigneesPickerProps) {
     enabled: open,
   });
 
-  // Lookup selected user details (cache result so we don't fight rerenders).
   const { data: selectedUsers = [] } = useQuery({
     queryKey: ['users', 'selected', value],
     queryFn: async () => {
@@ -311,22 +311,48 @@ function AssigneesPicker({ value, onChange }: AssigneesPickerProps) {
     enabled: value.length > 0,
   });
 
+  // Close on click-outside and on Escape — standard combobox behaviour.
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   const toggle = (id: string) => {
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
   };
 
   return (
-    <div>
-      <span className="mb-1.5 block text-sm font-medium text-foreground">Assignees</span>
+    <div ref={containerRef}>
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-sm font-medium text-foreground">Assignees</span>
+        {value.length > 0 && (
+          <span className="text-xs text-muted">
+            {value.length} selected
+          </span>
+        )}
+      </div>
 
       {selectedUsers.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-2">
+        <div className="mb-2 flex flex-wrap gap-1.5">
           {selectedUsers.map((u) => (
             <span
               key={u._id}
-              className="inline-flex items-center gap-2 rounded-full bg-primary-50 px-2 py-1 text-xs font-medium text-primary-700"
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 py-0.5 pl-0.5 pr-1.5 text-xs font-medium text-primary-700"
             >
-              <Avatar name={u.name} size="sm" className="h-5 w-5 text-[10px]" />
+              <Avatar name={u.name} size="sm" className="h-5 w-5 text-[10px] ring-0" />
               {u.name}
               <button
                 type="button"
@@ -354,9 +380,9 @@ function AssigneesPicker({ value, onChange }: AssigneesPickerProps) {
         />
 
         {open && (
-          <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-surface-border bg-white shadow-lg">
+          <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-surface-border bg-white shadow-lg">
             {users.length === 0 ? (
-              <p className="p-3 text-sm text-muted">No users found.</p>
+              <p className="p-3 text-center text-sm text-muted">No users found.</p>
             ) : (
               users.map((u) => {
                 const selected = value.includes(u._id);
@@ -367,26 +393,19 @@ function AssigneesPicker({ value, onChange }: AssigneesPickerProps) {
                     onClick={() => toggle(u._id)}
                     className={cn(
                       'flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors',
-                      selected ? 'bg-primary-50' : 'hover:bg-surface-subtle',
+                      selected ? 'bg-primary-50/60' : 'hover:bg-surface-subtle',
                     )}
                   >
-                    <Avatar name={u.name} size="sm" />
+                    <Avatar name={u.name} src={u.avatar} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium text-foreground">{u.name}</p>
                       <p className="truncate text-xs text-muted">{u.email}</p>
                     </div>
-                    {selected && <span className="text-xs text-primary-600">Selected</span>}
+                    {selected && <Check className="h-4 w-4 shrink-0 text-primary-600" />}
                   </button>
                 );
               })
             )}
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="block w-full border-t border-surface-border px-3 py-2 text-center text-xs text-muted hover:bg-surface-subtle"
-            >
-              Close
-            </button>
           </div>
         )}
       </div>

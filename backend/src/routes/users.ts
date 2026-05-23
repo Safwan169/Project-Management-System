@@ -8,6 +8,7 @@ import {
   getUserStats,
 } from '../controllers/userController';
 import { protect, restrictTo } from '../middlewares/auth';
+import { validateObjectId } from '../middlewares/validateObjectId';
 import { uploadAvatar } from '../config/multer';
 
 const router = Router();
@@ -15,10 +16,15 @@ const router = Router();
 router.use(protect);
 
 router.get('/', listUsers);
-router.get('/:id', getUser);
-router.patch('/:id', updateUser);
-router.delete('/:id', restrictTo('admin'), deleteUser);
-router.post('/:id/avatar', uploadAvatar.single('avatar'), uploadUserAvatar);
-router.get('/:id/stats', getUserStats);
+router.get('/:id', validateObjectId('id'), getUser);
+router.patch('/:id', validateObjectId('id'), updateUser);
+router.delete('/:id', validateObjectId('id'), restrictTo('admin'), deleteUser);
+router.post(
+  '/:id/avatar',
+  validateObjectId('id'),
+  uploadAvatar.single('avatar'),
+  uploadUserAvatar,
+);
+router.get('/:id/stats', validateObjectId('id'), getUserStats);
 
 export default router;

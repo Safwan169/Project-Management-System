@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import fs from 'fs/promises';
 import path from 'path';
-import { Task, ITask, ActivityEntry } from '../models/Task';
+import { Task, ITask, ActivityEntry, TaskStatus } from '../models/Task';
 import { Project } from '../models/Project';
 import { Sprint } from '../models/Sprint';
 import { AppError } from '../utils/AppError';
@@ -69,6 +69,13 @@ export const createTask = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('The chosen sprint does not belong to that project.', 400);
   }
 
+  // Append at the bottom of its column.
+  const resolvedStatus = status ?? 'todo';
+  const last = await Task.findOne({ sprint: sprintId, status: resolvedStatus })
+    .sort({ order: -1 })
+    .select('order');
+  const nextOrder = (last?.order ?? -1) + 1;
+
   const task = await Task.create({
     title,
     description,
@@ -78,7 +85,8 @@ export const createTask = asyncHandler(async (req: Request, res: Response) => {
     createdBy: req.user!.id,
     estimate,
     priority,
-    status,
+    status: resolvedStatus,
+    order: nextOrder,
     dueDate,
     tags,
     activityLog: [
@@ -121,7 +129,7 @@ export const getTasks = asyncHandler(async (req: Request, res: Response) => {
 
   const [tasks, total] = await Promise.all([
     Task.find(filter)
-      .sort({ createdAt: -1 })
+      .sort({ status: 1, order: 1, createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('assignees', 'name avatar'),
@@ -464,4 +472,36 @@ export const updateSubtasks = asyncHandler(async (req: Request, res: Response) =
     message: 'Subtasks updated successfully',
     data: { subtasks: task.subtasks },
   });
+});
+
+// Bulk reorder kanban cards. Body: { items: [{ id, status, order }, ...] }
+// Each id gets its status and order overwritten. Same status-transition rule
+// as updateTask: a non-manager moving into 'done' is bounced to 'review'.
+export const reorderTasks = asyncHandler(async (req: Request, res: Response) => {
+  const items = (req.body?.items ?? []) as { id: string; status: string; order: number }[];
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new AppError('Provide a non-empty "items" array.', 400);
+  }
+
+  const isPrivileged = req.user!.role === 'admin' || req.user!.role === 'manager';
+
+  const ops = items
+    .filter((it) => Types.ObjectId.isValid(it.id))
+    .map((it) => {
+      const status: TaskStatus =
+        !isPrivileged && it.status === 'done' ? 'review' : (it.status as TaskStatus);
+      return {
+        updateOne: {
+          filter: { _id: new Types.ObjectId(it.id) },
+          update: { $set: { status, order: it.order } },
+        },
+      };
+    });
+
+  if (ops.length === 0) {
+    throw new AppError('No valid task ids in payload.', 400);
+  }
+
+  await Task.bulkWrite(ops);
+  res.status(200).json({ message: 'Tasks reordered successfully' });
 });

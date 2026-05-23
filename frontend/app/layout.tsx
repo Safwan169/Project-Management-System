@@ -15,8 +15,11 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'pms — Project Management',
-  description: 'Plan projects, run sprints, and track tasks with pms.',
+  title: {
+    default: 'PMS — Project Management',
+    template: '%s · PMS',
+  },
+  description: 'Plan projects, run sprints, and track tasks with PMS.',
 };
 
 export default function RootLayout({
