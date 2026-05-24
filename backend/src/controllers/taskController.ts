@@ -13,6 +13,15 @@ function param(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 }
 
+/** Normalize ObjectId or populated { _id } ref to a string id. */
+function refId(ref: Types.ObjectId | { _id: Types.ObjectId } | string): string {
+  if (typeof ref === 'string') return ref;
+  if (typeof ref === 'object' && ref !== null && '_id' in ref) {
+    return (ref._id as Types.ObjectId).toString();
+  }
+  return (ref as Types.ObjectId).toString();
+}
+
 async function findTaskOr404(id: string): Promise<ITask> {
   if (!Types.ObjectId.isValid(id)) {
     throw new AppError('Invalid task id.', 400);
@@ -22,13 +31,24 @@ async function findTaskOr404(id: string): Promise<ITask> {
   return task;
 }
 
+async function canAccessTask(task: ITask, userId: string, role: string): Promise<boolean> {
+  if (role === 'admin' || role === 'manager') return true;
+  if (refId(task.createdBy) === userId) return true;
+  if (task.assignees.some((a) => refId(a) === userId)) return true;
+
+  const project = await Project.findById(task.project).select('members createdBy');
+  if (!project) return false;
+  if (refId(project.createdBy) === userId) return true;
+  return project.members.some((m) => refId(m.user) === userId);
+}
+
 async function canEditTask(task: ITask, userId: string, role: string): Promise<boolean> {
   if (role === 'admin' || role === 'manager') return true;
-  if (task.createdBy.toString() === userId) return true;
-  if (task.assignees.some((a) => a.toString() === userId)) return true;
+  if (refId(task.createdBy) === userId) return true;
+  if (task.assignees.some((a) => refId(a) === userId)) return true;
   const project = await Project.findById(task.project).select('members');
   return Boolean(
-    project?.members.some((m) => m.user.toString() === userId && m.role === 'manager'),
+    project?.members.some((m) => refId(m.user) === userId && m.role === 'manager'),
   );
 }
 
@@ -146,13 +166,17 @@ export const getTasks = asyncHandler(async (req: Request, res: Response) => {
 
 export const getTask = asyncHandler(async (req: Request, res: Response) => {
   const id = param(req.params.id);
-  if (!Types.ObjectId.isValid(id)) {
-    throw new AppError('Invalid task id.', 400);
+  const taskDoc = await findTaskOr404(id);
+
+  if (!(await canAccessTask(taskDoc, req.user!.id, req.user!.role))) {
+    throw new AppError('You do not have permission to view this task.', 403);
   }
 
   const task = await Task.findById(id)
     .populate('assignees', 'name email avatar')
     .populate('createdBy', 'name email avatar')
+    .populate('project', 'title client status')
+    .populate('sprint', 'title sprintNumber')
     .populate('comments.user', 'name email avatar')
     .populate('activityLog.user', 'name avatar')
     .populate('timeLogs.user', 'name avatar')
@@ -190,24 +214,27 @@ export const updateTask = asyncHandler(async (req: Request, res: Response) => {
 
   const userId = new Types.ObjectId(req.user!.id);
 
-  // Moving to done requires passing review first, unless admin/manager.
-  if (req.body.status === 'done' && task.status !== 'review') {
-    if (req.user!.role !== 'admin' && req.user!.role !== 'manager') {
-      logActivity(task, {
-        user: userId,
-        action: 'changed status',
-        field: 'status',
-        oldValue: task.status,
-        newValue: 'review',
-      });
-      task.status = 'review';
-      await task.save();
-      res.status(200).json({
-        message: 'Task moved to review — a manager must approve "done".',
-        data: { task },
-      });
-      return;
+  const isPrivileged = req.user!.role === 'admin' || req.user!.role === 'manager';
+
+  // Only admin/manager may set status to "done".
+  if (req.body.status === 'done' && !isPrivileged) {
+    if (task.status === 'review') {
+      throw new AppError('Only a manager or admin can mark this task as done.', 403);
     }
+    logActivity(task, {
+      user: userId,
+      action: 'changed status',
+      field: 'status',
+      oldValue: task.status,
+      newValue: 'review',
+    });
+    task.status = 'review';
+    await task.save();
+    res.status(200).json({
+      message: 'Task moved to review — a manager must approve "done".',
+      data: { task },
+    });
+    return;
   }
 
   // Diff watched fields before applying so we capture old and new values.
@@ -286,6 +313,9 @@ export const deleteTask = asyncHandler(async (req: Request, res: Response) => {
 
 export const uploadAttachment = asyncHandler(async (req: Request, res: Response) => {
   const task = await findTaskOr404(param(req.params.id));
+  if (!(await canEditTask(task, req.user!.id, req.user!.role))) {
+    throw new AppError('You do not have permission to upload attachments.', 403);
+  }
   if (!req.file) throw new AppError('No file was uploaded.', 400);
 
   task.attachments.push({
@@ -339,6 +369,9 @@ export const deleteAttachment = asyncHandler(async (req: Request, res: Response)
 
 export const addComment = asyncHandler(async (req: Request, res: Response) => {
   const task = await findTaskOr404(param(req.params.id));
+  if (!(await canAccessTask(task, req.user!.id, req.user!.role))) {
+    throw new AppError('You do not have permission to comment on this task.', 403);
+  }
   const { text, parentComment } = req.body;
   if (!text || typeof text !== 'string' || !text.trim()) {
     throw new AppError('Comment text is required.', 400);
@@ -404,6 +437,9 @@ export const deleteComment = asyncHandler(async (req: Request, res: Response) =>
 
 export const logTime = asyncHandler(async (req: Request, res: Response) => {
   const task = await findTaskOr404(param(req.params.id));
+  if (!(await canEditTask(task, req.user!.id, req.user!.role))) {
+    throw new AppError('You do not have permission to log time on this task.', 403);
+  }
   const { hours, date, note } = req.body;
 
   const numericHours = Number(hours);

@@ -22,6 +22,8 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+let lastRateLimitToastAt = 0;
+
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiError>) => {
@@ -39,6 +41,17 @@ api.interceptors.response.use(
 
     const message =
       error.response?.data?.message ?? error.message ?? 'Something went wrong. Please try again.';
+
+    // Avoid stacking identical rate-limit toasts from parallel requests.
+    if (status === 429) {
+      const now = Date.now();
+      if (now - lastRateLimitToastAt > 4000) {
+        lastRateLimitToastAt = now;
+        toast.error(message);
+      }
+      return Promise.reject(error);
+    }
+
     toast.error(message);
 
     return Promise.reject(error);

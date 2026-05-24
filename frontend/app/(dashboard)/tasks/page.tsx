@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, LayoutGrid, Table2, CheckSquare } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority } from '@/types';
@@ -15,6 +16,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { TaskTable } from '@/components/tasks/TaskTable';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { TaskFormModal } from '@/components/tasks/TaskFormModal';
+import { useTaskDetail } from '@/components/tasks/TaskDetailContext';
 
 type StatusTab = 'all' | TaskStatus;
 type PriorityTab = 'all' | TaskPriority;
@@ -39,8 +41,16 @@ const priorityTabs: { value: PriorityTab; label: string; dot?: string }[] = [
 const VIEW_KEY = 'pms.tasksView';
 
 export default function TasksPage() {
+  const router = useRouter();
   const { user } = useAuth();
+  const { openTask } = useTaskDetail();
   const canManage = user?.role === 'admin' || user?.role === 'manager';
+
+  useEffect(() => {
+    if (user?.role === 'member') {
+      router.replace('/my-tasks');
+    }
+  }, [user?.role, router]);
 
   const [project, setProject] = useState('');
   const [sprint, setSprint] = useState('');
@@ -250,17 +260,14 @@ export default function TasksPage() {
       ) : view === 'list' ? (
         <TaskTable
           tasks={tasks}
-          onRowClick={() => {
-            /* Detail modal lands in phase 2. */
-          }}
+          onRowClick={(task) => openTask(task._id)}
           canBulkEdit={canManage}
+          canChangeStatus
         />
       ) : (
         <KanbanBoard
           tasks={tasks}
-          onTaskClick={() => {
-            /* Detail modal lands in phase 2. */
-          }}
+          onTaskClick={(task) => openTask(task._id)}
           onAddInColumn={canCreate ? openCreate : undefined}
         />
       )}

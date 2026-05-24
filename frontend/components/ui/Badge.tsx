@@ -25,6 +25,8 @@ const statusColors: Record<string, BadgeColor> = {
   active: 'green',
   in_progress: 'blue',
   in_review: 'amber',
+  inprogress: 'blue',
+  review: 'amber',
   on_hold: 'amber',
   todo: 'gray',
   done: 'green',

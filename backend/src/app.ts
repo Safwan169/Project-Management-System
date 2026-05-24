@@ -31,28 +31,27 @@ if (isDevelopment) {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 100 req / 15 min / IP across all API routes; auth gets a tighter limit.
+// General API cap (SPA + React Query can burst hundreds of calls while developing).
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: isDevelopment ? 10_000 : 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests, please slow down.' },
 });
 
+// Login/register only — count failed attempts so successful logins are not penalized.
 const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 10,
+  windowMs: 15 * 60 * 1000,
+  max: isDevelopment ? 200 : 30,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    message: 'Too many auth attempts, please try again in an hour.',
+    message: 'Too many login attempts. Please wait a few minutes and try again.',
   },
 });
-
-app.use('/api', apiLimiter);
-app.use('/api', responseWrapper);
 
 app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({
@@ -63,17 +62,20 @@ app.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+app.use('/api', responseWrapper);
+
 // Serve uploaded files.
 app.use('/uploads', express.static('uploads'));
 
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth', authRouter);
-app.use('/api/projects', projectRouter);
-app.use('/api/tasks', taskRouter);
-app.use('/api/users', userRouter);
-app.use('/api/dashboard', dashboardRouter);
-app.use('/api/reports', reportRouter);
+
+app.use('/api/projects', apiLimiter, projectRouter);
+app.use('/api/tasks', apiLimiter, taskRouter);
+app.use('/api/users', apiLimiter, userRouter);
+app.use('/api/dashboard', apiLimiter, dashboardRouter);
+app.use('/api/reports', apiLimiter, reportRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

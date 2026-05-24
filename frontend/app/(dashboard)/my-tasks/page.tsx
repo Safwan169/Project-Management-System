@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useTaskDetail } from '@/components/tasks/TaskDetailContext';
 import { useQuery } from '@tanstack/react-query';
 import { Search, LayoutGrid, Table2, CheckSquare } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority } from '@/types';
@@ -38,10 +38,8 @@ const priorityTabs: { value: PriorityTab; label: string; dot?: string }[] = [
 const VIEW_KEY = 'pms.myTasksView';
 
 export default function MyTasksPage() {
-  const router = useRouter();
+  const { openTask } = useTaskDetail();
   const { user } = useAuth();
-  const canSelfApprove = user?.role === 'admin' || user?.role === 'manager';
-
   const [project, setProject] = useState('');
   const [sprint, setSprint] = useState('');
   const [status, setStatus] = useState<StatusTab>('all');
@@ -188,13 +186,13 @@ export default function MyTasksPage() {
       ) : view === 'list' ? (
         <TaskTable
           tasks={tasks}
-          onRowClick={(task) => router.push(`/tasks?taskId=${task._id}`)}
+          onRowClick={(task) => openTask(task._id)}
+          canChangeStatus
         />
       ) : (
         <KanbanBoard
           tasks={tasks}
-          onTaskClick={(task) => router.push(`/tasks?taskId=${task._id}`)}
-          blockSelfApprove={!canSelfApprove}
+          onTaskClick={(task) => openTask(task._id)}
         />
       )}
     </div>

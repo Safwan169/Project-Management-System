@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import api from './axios';
 import type { Task, User } from '@/types';
 
@@ -125,4 +126,28 @@ export async function fetchUsers(search?: string): Promise<User[]> {
     params: search ? { search } : undefined,
   });
   return data.data.users;
+}
+
+/** Update task rows in list caches so Kanban/list views move cards immediately. */
+export function patchTaskInCaches(queryClient: QueryClient, updated: Task): void {
+  const patchList = (old: TaskListResult | undefined) => {
+    if (!old?.tasks) return old;
+    return {
+      ...old,
+      tasks: old.tasks.map((t) => (t._id === updated._id ? { ...t, ...updated } : t)),
+    };
+  };
+  queryClient.setQueriesData({ queryKey: ['tasks'] }, patchList);
+  queryClient.setQueriesData({ queryKey: ['my-tasks'] }, patchList);
+}
+
+/** Refetch all views that show task lists after a mutation. */
+export function invalidateTaskCaches(queryClient: QueryClient, taskId?: string): void {
+  if (taskId) {
+    queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+  }
+  queryClient.invalidateQueries({ queryKey: ['tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+  queryClient.invalidateQueries({ queryKey: ['sprints'] });
+  queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 }

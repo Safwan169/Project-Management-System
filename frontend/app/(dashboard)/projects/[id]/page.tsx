@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { fetchProject, fetchProjectStats } from '@/lib/projects-api';
 import { thumbnailUrl } from '@/lib/media';
-import { formatCurrency, formatDate, formatDuration } from '@/lib/format';
+import { formatCurrency, formatDate, formatHours } from '@/lib/format';
 import { useAuth } from '@/store/authStore';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
@@ -79,7 +79,7 @@ export default function ProjectDetailPage() {
     { label: 'Progress', value: `${stats?.progressPercent ?? 0}%`, icon: TrendingUp },
     {
       label: 'Time Logged',
-      value: formatDuration(stats?.timeLogged ?? 0),
+      value: formatHours(stats?.timeLogged ?? 0),
       icon: Clock,
     },
   ];

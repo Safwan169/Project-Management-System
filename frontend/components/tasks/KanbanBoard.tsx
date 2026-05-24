@@ -11,10 +11,12 @@ import {
   type DropResult,
 } from '@hello-pangea/dnd';
 import type { Task, TaskStatus, TaskPriority, User } from '@/types';
-import { reorderTasks } from '@/lib/tasks-api';
+import { reorderTasks, invalidateTaskCaches } from '@/lib/tasks-api';
 import { formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { AvatarStack } from '@/components/ui/Avatar';
+import { useAuth } from '@/store/authStore';
+import { canApproveDone } from '@/lib/task-status';
 
 const columns: { id: TaskStatus; title: string; accent: string }[] = [
   { id: 'todo', title: 'To do', accent: 'bg-slate-500' },
@@ -46,17 +48,16 @@ interface KanbanBoardProps {
   tasks: Task[];
   onTaskClick: (task: Task) => void;
   onAddInColumn?: (status: TaskStatus) => void;
-  /** If true, dropping into Done is blocked client-side with a toast. */
-  blockSelfApprove?: boolean;
 }
 
 export function KanbanBoard({
   tasks,
   onTaskClick,
   onAddInColumn,
-  blockSelfApprove = false,
 }: KanbanBoardProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const allowDone = canApproveDone(user?.role);
   // Local board state so DnD updates feel instant; resynced from props.
   const [board, setBoard] = useState<BoardState>(() => buildBoard(tasks));
 
@@ -67,9 +68,7 @@ export function KanbanBoard({
   const mutation = useMutation({
     mutationFn: reorderTasks,
     onSuccess: () => {
-      // Refetch so any server-side adjustments (e.g. review-guard) show through.
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
+      invalidateTaskCaches(queryClient);
     },
     onError: () => {
       // Roll back to the server's view on failure.
@@ -79,7 +78,7 @@ export function KanbanBoard({
   });
 
   const handleDragEnd = (result: DropResult) => {
-    const { source, destination, draggableId } = result;
+    const { source, destination } = result;
     if (!destination) return;
     if (
       source.droppableId === destination.droppableId &&
@@ -89,14 +88,12 @@ export function KanbanBoard({
     }
 
     const from = source.droppableId as TaskStatus;
-    const to = destination.droppableId as TaskStatus;
+    const dropColumn = destination.droppableId as TaskStatus;
+    const droppedOnDone = dropColumn === 'done';
+    // Members completing work: drop on Done → lands in Review for manager approval.
+    const to: TaskStatus =
+      droppedOnDone && !allowDone ? 'review' : dropColumn;
 
-    if (blockSelfApprove && to === 'done') {
-      toast.error('A manager must approve "done" — move to Review first.');
-      return;
-    }
-
-    // Compute the new board synchronously so we can derive items + toast once.
     const next: BoardState = {
       todo: [...board.todo],
       inprogress: [...board.inprogress],
@@ -117,8 +114,12 @@ export function KanbanBoard({
     setBoard(next);
     mutation.mutate(items);
 
-    if (from !== to && to === 'done') {
-      toast.success(blockSelfApprove ? 'Sent to review' : 'Marked as done');
+    if (from !== to && droppedOnDone) {
+      if (!allowDone) {
+        toast('Sent to review — a manager must approve "done".', { icon: 'ℹ️' });
+      } else {
+        toast.success('Marked as done');
+      }
     }
   };
 
@@ -140,6 +141,11 @@ export function KanbanBoard({
                     <span className={cn('h-2 w-2 rounded-full', col.accent)} />
                     <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                       {col.title}
+                      {col.id === 'done' && !allowDone && (
+                        <span className="ml-1 font-normal normal-case text-amber-600">
+                          (mgr approves)
+                        </span>
+                      )}
                     </h3>
                     <span className="text-xs font-medium text-slate-400">
                       {board[col.id].length}

@@ -23,15 +23,21 @@ interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  roles?: ('admin' | 'manager' | 'member')[];
 }
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'My Tasks', href: '/my-tasks', icon: CheckSquare },
   { label: 'Projects', href: '/projects', icon: FolderKanban },
-  { label: 'Tasks', href: '/tasks', icon: CheckSquare },
-  { label: 'Team', href: '/team', icon: Users },
-  { label: 'Reports', href: '/reports', icon: BarChart3 },
+  {
+    label: 'All Tasks',
+    href: '/tasks',
+    icon: CheckSquare,
+    roles: ['admin', 'manager'],
+  },
+  { label: 'Team', href: '/team', icon: Users, roles: ['admin', 'manager'] },
+  { label: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'manager'] },
 ];
 
 export function Sidebar() {
@@ -74,8 +80,8 @@ export function Sidebar() {
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-surface-border bg-white transition-transform',
-          'md:static md:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          'md:translate-x-0',
         )}
       >
         <div className="flex items-center justify-between px-5 py-5">
@@ -90,7 +96,9 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3">
-          {navItems.map(({ label, href, icon: Icon }) => {
+          {navItems
+            .filter((item) => !item.roles || (user && item.roles.includes(user.role)))
+            .map(({ label, href, icon: Icon }) => {
             // Highlight the section the current route belongs to.
             const active = pathname === href || pathname.startsWith(`${href}/`);
             return (

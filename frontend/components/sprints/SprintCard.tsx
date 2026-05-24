@@ -1,14 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useTaskDetail } from '@/components/tasks/TaskDetailContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import type { Sprint, Task, TaskStatus, User } from '@/types';
-import { fetchTasks, updateTask } from '@/lib/tasks-api';
+import { fetchTasks, updateTask, patchTaskInCaches, invalidateTaskCaches } from '@/lib/tasks-api';
 import { formatDate } from '@/lib/format';
 import { useAuth } from '@/store/authStore';
+import {
+  resolveStatusUpdate,
+  statusOptionsForRole,
+  wasBlockedDoneAttempt,
+} from '@/lib/task-status';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -19,12 +24,6 @@ const statusColor = {
   completed: 'green',
 } as const;
 
-const statusOptions: { value: TaskStatus; label: string }[] = [
-  { value: 'todo', label: 'To Do' },
-  { value: 'inprogress', label: 'In Progress' },
-  { value: 'review', label: 'Review' },
-  { value: 'done', label: 'Done' },
-];
 
 const priorityBadge: Record<string, 'gray' | 'blue' | 'amber' | 'red'> = {
   low: 'gray',
@@ -43,7 +42,7 @@ interface SprintCardProps {
 export function SprintCard({ sprint, canManage, onEdit, onDelete }: SprintCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(canManage);
-  const router = useRouter();
+  const { openTask } = useTaskDetail();
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -67,16 +66,21 @@ export function SprintCard({ sprint, canManage, onEdit, onDelete }: SprintCardPr
       );
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: TaskStatus }) =>
-      updateTask(id, { status }),
-    onSuccess: (updated, { status }) => {
-      if (status === 'done' && updated.status === 'review') {
+    mutationFn: ({ id, requested }: { id: string; requested: TaskStatus }) => {
+      const status = resolveStatusUpdate(requested, user?.role);
+      return updateTask(id, { status }).then((updated) => ({ updated, requested, status }));
+    },
+    onSuccess: ({ updated, requested, status }) => {
+      patchTaskInCaches(queryClient, updated);
+      if (
+        wasBlockedDoneAttempt(requested, status, user?.role) ||
+        (requested === 'done' && updated.status === 'review')
+      ) {
         toast('Sent to review — a manager must approve "done".');
       } else {
         toast.success('Task updated');
       }
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['sprints'] });
+      invalidateTaskCaches(queryClient, updated._id);
     },
   });
 
@@ -180,8 +184,10 @@ export function SprintCard({ sprint, canManage, onEdit, onDelete }: SprintCardPr
                 task={task}
                 currentUserId={user?._id}
                 canManage={canManage}
-                onOpen={() => router.push(`/tasks?taskId=${task._id}`)}
-                onChangeStatus={(status) => statusMutation.mutate({ id: task._id, status })}
+                onOpen={() => openTask(task._id)}
+                onChangeStatus={(requested) =>
+                  statusMutation.mutate({ id: task._id, requested })
+                }
               />
             ))}
           </ul>
@@ -206,6 +212,8 @@ function SprintTaskRow({
   onOpen,
   onChangeStatus,
 }: SprintTaskRowProps) {
+  const { user } = useAuth();
+  const statusOptions = statusOptionsForRole(user?.role);
   const isMine = (task.assignees as User[]).some(
     (a) => (typeof a === 'string' ? a : a._id) === currentUserId,
   );
@@ -233,19 +241,23 @@ function SprintTaskRow({
         {task.dueDate ? formatDate(task.dueDate) : '—'}
       </span>
 
-      <select
-        value={task.status}
-        disabled={!canChangeStatus}
-        onClick={(e) => e.stopPropagation()}
-        onChange={(e) => onChangeStatus(e.target.value as TaskStatus)}
-        className="h-7 shrink-0 rounded-md border border-surface-border bg-white px-2 text-xs text-foreground focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-muted"
-      >
-        {statusOptions.map((s) => (
-          <option key={s.value} value={s.value}>
-            {s.label}
-          </option>
-        ))}
-      </select>
+      {canChangeStatus && task.status === 'done' && user?.role === 'member' ? (
+        <Badge status="done">Done</Badge>
+      ) : (
+        <select
+          value={task.status}
+          disabled={!canChangeStatus}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => onChangeStatus(e.target.value as TaskStatus)}
+          className="h-7 shrink-0 rounded-md border border-surface-border bg-white px-2 text-xs text-foreground focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-muted"
+        >
+          {statusOptions.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      )}
     </li>
   );
 }

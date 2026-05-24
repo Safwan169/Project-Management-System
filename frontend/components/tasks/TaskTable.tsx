@@ -5,9 +5,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ArrowUpDown, ChevronDown } from 'lucide-react';
 import type { Task, TaskPriority, TaskStatus, User, Project, Sprint } from '@/types';
-import { updateTask } from '@/lib/tasks-api';
+import { updateTask, patchTaskInCaches, invalidateTaskCaches } from '@/lib/tasks-api';
 import { formatDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/store/authStore';
+import {
+  canApproveDone,
+  resolveStatusUpdate,
+  statusOptionsForRole,
+  wasBlockedDoneAttempt,
+} from '@/lib/task-status';
 import { Badge } from '@/components/ui/Badge';
 import { AvatarStack } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -46,10 +53,18 @@ interface TaskTableProps {
   tasks: Task[];
   onRowClick: (task: Task) => void;
   canBulkEdit?: boolean;
+  canChangeStatus?: boolean;
 }
 
-export function TaskTable({ tasks, onRowClick, canBulkEdit = false }: TaskTableProps) {
+export function TaskTable({
+  tasks,
+  onRowClick,
+  canBulkEdit = false,
+  canChangeStatus = false,
+}: TaskTableProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const rowStatusOptions = statusOptionsForRole(user?.role);
   const [sortKey, setSortKey] = useState<SortKey>('dueDate');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -112,10 +127,27 @@ export function TaskTable({ tasks, onRowClick, canBulkEdit = false }: TaskTableP
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      invalidateTaskCaches(queryClient);
       toast.success(`Updated ${selected.size} task(s)`);
       setSelected(new Set());
       setBulkMenu(false);
+    },
+  });
+
+  const rowStatusMutation = useMutation({
+    mutationFn: ({ id, requested }: { id: string; requested: TaskStatus }) => {
+      const status = resolveStatusUpdate(requested, user?.role);
+      return updateTask(id, { status }).then((updated) => ({ updated, requested, status }));
+    },
+    onSuccess: ({ updated, requested, status }) => {
+      patchTaskInCaches(queryClient, updated);
+      if (
+        wasBlockedDoneAttempt(requested, status, user?.role) ||
+        (requested === 'done' && updated.status === 'review')
+      ) {
+        toast('Sent to review — a manager must approve "done".');
+      }
+      invalidateTaskCaches(queryClient, updated._id);
     },
   });
 
@@ -233,8 +265,31 @@ export function TaskTable({ tasks, onRowClick, canBulkEdit = false }: TaskTableP
                       <td className="px-4 py-3">
                         <Badge color={priorityBadge[task.priority]}>{task.priority}</Badge>
                       </td>
-                      <td className="px-4 py-3">
-                        <Badge status={task.status}>{statusLabel[task.status]}</Badge>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {canChangeStatus ? (
+                          !canApproveDone(user?.role) && task.status === 'done' ? (
+                            <Badge status={task.status}>{statusLabel[task.status]}</Badge>
+                          ) : (
+                          <select
+                            value={task.status}
+                            onChange={(e) =>
+                              rowStatusMutation.mutate({
+                                id: task._id,
+                                requested: e.target.value as TaskStatus,
+                              })
+                            }
+                            className="h-8 rounded-md border border-surface-border bg-white px-2 text-xs"
+                          >
+                            {rowStatusOptions.map((s) => (
+                              <option key={s.value} value={s.value}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+                          )
+                        ) : (
+                          <Badge status={task.status}>{statusLabel[task.status]}</Badge>
+                        )}
                       </td>
                       <td
                         className={cn(

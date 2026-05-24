@@ -16,6 +16,12 @@ import {
 } from '../controllers/taskController';
 import { protect, restrictTo } from '../middlewares/auth';
 import { validateObjectId } from '../middlewares/validateObjectId';
+import {
+  validate,
+  taskCommentValidator,
+  taskTimeLogValidator,
+  taskSubtasksValidator,
+} from '../middlewares/validate';
 import { uploadAttachment as attachmentUpload } from '../config/multer';
 
 const router = Router();
@@ -47,10 +53,16 @@ router.delete(
   deleteAttachment,
 );
 
-router.post('/:id/comments', validateObjectId('id'), addComment);
+router.post(
+  '/:id/comments',
+  validateObjectId('id'),
+  validate(taskCommentValidator),
+  addComment,
+);
 router.patch(
   '/:id/comments/:commentId',
   validateObjectId('id', 'commentId'),
+  validate(taskCommentValidator),
   editComment,
 );
 router.delete(
@@ -59,8 +71,17 @@ router.delete(
   deleteComment,
 );
 
-// Time tracking + subtasks batch edits.
-router.post('/:id/time-log', validateObjectId('id'), logTime);
-router.patch('/:id/subtasks', validateObjectId('id'), updateSubtasks);
+router.post(
+  '/:id/time-log',
+  validateObjectId('id'),
+  validate(taskTimeLogValidator),
+  logTime,
+);
+router.patch(
+  '/:id/subtasks',
+  validateObjectId('id'),
+  validate(taskSubtasksValidator),
+  updateSubtasks,
+);
 
 export default router;

@@ -10,8 +10,8 @@ import { fetchSprints, deleteSprint } from '@/lib/sprints-api';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { SprintCard } from './SprintCard';
 import { SprintFormModal } from './SprintFormModal';
+import { SprintReorderList } from './SprintReorderList';
 
 interface SprintListProps {
   project: Project;
@@ -79,17 +79,13 @@ export function SprintList({ project, canManage }: SprintListProps) {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {sprints.map((sprint) => (
-            <SprintCard
-              key={sprint._id}
-              sprint={sprint}
-              canManage={canManage}
-              onEdit={openEdit}
-              onDelete={setDeleting}
-            />
-          ))}
-        </div>
+        <SprintReorderList
+          project={project}
+          sprints={sprints}
+          canManage={canManage}
+          onEdit={openEdit}
+          onDelete={setDeleting}
+        />
       )}
 
       {canManage && (

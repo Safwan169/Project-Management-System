@@ -4,7 +4,7 @@ import { Project, IProject } from '../models/Project';
 import { User } from '../models/User';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
-import { countSprints, aggregateTasks } from '../utils/projectMetrics';
+import { countSprints, aggregateTasks, tasksByProject } from '../utils/projectMetrics';
 
 function param(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
@@ -89,9 +89,22 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
     Project.countDocuments(filter),
   ]);
 
+  const taskStats = await tasksByProject(projects.map((p) => p._id));
+  const enriched = projects.map((p) => {
+    const stats = taskStats.get(p._id.toString()) ?? { total: 0, completed: 0 };
+    const doc = p.toObject();
+    return {
+      ...doc,
+      totalTasks: stats.total,
+      completedTasks: stats.completed,
+      progressPercent:
+        stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
+    };
+  });
+
   res.status(200).json({
     data: {
-      projects,
+      projects: enriched,
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     },
   });

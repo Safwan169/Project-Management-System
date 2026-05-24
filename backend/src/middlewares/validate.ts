@@ -47,3 +47,29 @@ export const updatePasswordValidator: ValidationChain[] = [
     .isLength({ min: 8 })
     .withMessage('New password must be at least 8 characters'),
 ];
+
+export const taskCommentValidator: ValidationChain[] = [
+  body('text').trim().notEmpty().withMessage('Comment text is required'),
+  body('parentComment')
+    .optional()
+    .isMongoId()
+    .withMessage('Parent comment must be a valid id'),
+];
+
+export const taskTimeLogValidator: ValidationChain[] = [
+  body('hours')
+    .isFloat({ min: 0.01 })
+    .withMessage('Hours must be greater than 0'),
+  body('date').optional().isISO8601().withMessage('Date must be valid'),
+  body('note').optional().isString().trim(),
+];
+
+export const taskSubtasksValidator: ValidationChain[] = [
+  body('add').optional().isArray(),
+  body('add.*.title').optional().trim().notEmpty().withMessage('Subtask title is required'),
+  body('toggle').optional().isArray(),
+  body('toggle.*.id').optional().isMongoId(),
+  body('toggle.*.completed').optional().isBoolean(),
+  body('remove').optional().isArray(),
+  body('remove.*').optional().isMongoId(),
+];

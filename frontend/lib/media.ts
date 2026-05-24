@@ -14,3 +14,7 @@ export function avatarUrl(filename?: string): string | null {
   if (!filename) return null;
   return `${API_ORIGIN}/uploads/avatars/${filename}`;
 }
+
+export function attachmentUrl(taskId: string, filename: string): string {
+  return `${API_ORIGIN}/uploads/attachments/${taskId}/${filename}`;
+}

@@ -66,6 +66,10 @@ export interface Project {
   isOverdue: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Present on list responses from GET /projects */
+  totalTasks?: number;
+  completedTasks?: number;
+  progressPercent?: number;
 }
 
 // Returned by GET /api/projects/:id/stats.

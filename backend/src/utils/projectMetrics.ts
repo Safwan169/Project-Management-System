@@ -35,7 +35,15 @@ export async function aggregateTasks(projectId: Types.ObjectId): Promise<TaskCou
           completed: {
             $sum: { $cond: [{ $in: ['$status', ['done', 'completed']] }, 1, 0] },
           },
-          timeLogged: { $sum: { $ifNull: ['$timeSpent', 0] } },
+          timeLogged: {
+            $sum: {
+              $reduce: {
+                input: { $ifNull: ['$timeLogs', []] },
+                initialValue: 0,
+                in: { $add: ['$$value', { $ifNull: ['$$this.hours', 0] }] },
+              },
+            },
+          },
         },
       },
     ])
@@ -75,4 +83,38 @@ export async function tasksBySprint(
 export async function countTasksInSprint(sprintId: Types.ObjectId): Promise<number> {
   if (!(await collectionExists('tasks'))) return 0;
   return mongoose.connection.db!.collection('tasks').countDocuments({ sprint: sprintId });
+}
+
+export interface ProjectTaskStats {
+  total: number;
+  completed: number;
+}
+
+/** Batch task counts for many projects (used on project list). */
+export async function tasksByProject(
+  projectIds: Types.ObjectId[],
+): Promise<Map<string, ProjectTaskStats>> {
+  const counts = new Map<string, ProjectTaskStats>();
+  if (projectIds.length === 0 || !(await collectionExists('tasks'))) return counts;
+
+  const rows = await mongoose.connection
+    .db!.collection('tasks')
+    .aggregate<{ _id: Types.ObjectId; total: number; completed: number }>([
+      { $match: { project: { $in: projectIds } } },
+      {
+        $group: {
+          _id: '$project',
+          total: { $sum: 1 },
+          completed: {
+            $sum: { $cond: [{ $in: ['$status', ['done', 'completed']] }, 1, 0] },
+          },
+        },
+      },
+    ])
+    .toArray();
+
+  for (const row of rows) {
+    counts.set(row._id.toString(), { total: row.total, completed: row.completed });
+  }
+  return counts;
 }

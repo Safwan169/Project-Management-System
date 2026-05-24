@@ -1,10 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import { Calendar, AlertTriangle, Pencil, Trash2, ImageIcon } from 'lucide-react';
 import type { Project, User } from '@/types';
-import { fetchProjectStats } from '@/lib/projects-api';
 import { thumbnailUrl } from '@/lib/media';
 import { formatDate } from '@/lib/format';
 import { useAuth } from '@/store/authStore';
@@ -28,11 +26,11 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
   const { user } = useAuth();
   const canManage = user?.role === 'admin' || user?.role === 'manager';
 
-  // Per-card stats for the progress bar. Cached, so navigating back is free.
-  const { data: stats } = useQuery({
-    queryKey: ['project-stats', project._id],
-    queryFn: () => fetchProjectStats(project._id),
-  });
+  const totalTasks = project.totalTasks ?? 0;
+  const completedTasks = project.completedTasks ?? 0;
+  const progressPercent =
+    project.progressPercent ??
+    (totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0);
 
   const thumb = thumbnailUrl(project.thumbnail);
   const memberNames = project.members.map((m) => memberName(m.user)).filter(Boolean);
@@ -89,7 +87,15 @@ export function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
           <Badge status={project.status}>{project.status}</Badge>
         </div>
 
-        <ProgressBar value={stats?.progressPercent ?? 0} />
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted">
+            <span>
+              {completedTasks}/{totalTasks} tasks
+            </span>
+            <span>{progressPercent}%</span>
+          </div>
+          <ProgressBar value={progressPercent} />
+        </div>
 
         <div className="mt-auto flex items-center justify-between pt-1">
           <span

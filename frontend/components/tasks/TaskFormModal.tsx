@@ -8,16 +8,25 @@ import toast from 'react-hot-toast';
 import { Search, X, Check } from 'lucide-react';
 import type { Task, TaskPriority, TaskStatus, User } from '@/types';
 import { taskSchema, type TaskValues } from '@/lib/validators';
-import { createTask, updateTask, fetchUsers, type TaskInput } from '@/lib/tasks-api';
+import {
+  createTask,
+  updateTask,
+  fetchUsers,
+  invalidateTaskCaches,
+  type TaskInput,
+} from '@/lib/tasks-api';
 import { fetchProjects } from '@/lib/projects-api';
 import { fetchSprints } from '@/lib/sprints-api';
-import { cn } from '@/lib/utils';
+import { cn, toRefId, toRefIds } from '@/lib/utils';
+import { statusOptionsForRole } from '@/lib/task-status';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
+import { useAuth } from '@/store/authStore';
+import { resolveStatusUpdate, wasBlockedDoneAttempt } from '@/lib/task-status';
 
 const toDateInput = (iso?: string) => (iso ? iso.slice(0, 10) : '');
 
@@ -26,13 +35,6 @@ const priorityOptions: { value: TaskPriority; label: string; dot: string }[] = [
   { value: 'medium', label: 'Medium', dot: 'bg-blue-500' },
   { value: 'high', label: 'High', dot: 'bg-amber-500' },
   { value: 'critical', label: 'Critical', dot: 'bg-red-500' },
-];
-
-const statusOptions: { value: TaskStatus; label: string }[] = [
-  { value: 'todo', label: 'To Do' },
-  { value: 'inprogress', label: 'In Progress' },
-  { value: 'review', label: 'Review' },
-  { value: 'done', label: 'Done' },
 ];
 
 interface TaskFormModalProps {
@@ -53,7 +55,9 @@ export function TaskFormModal({
   defaultStatus,
 }: TaskFormModalProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const isEdit = Boolean(task);
+  const statusOptions = statusOptionsForRole(user?.role);
 
   const {
     register,
@@ -86,9 +90,9 @@ export function TaskFormModal({
     reset({
       title: task?.title ?? '',
       description: task?.description ?? '',
-      project: (task?.project as string) ?? defaultProjectId ?? '',
-      sprint: (task?.sprint as string) ?? defaultSprintId ?? '',
-      assignees: (task?.assignees as string[]) ?? [],
+      project: task?.project ? toRefId(task.project) : defaultProjectId ?? '',
+      sprint: task?.sprint ? toRefId(task.sprint) : defaultSprintId ?? '',
+      assignees: task?.assignees ? toRefIds(task.assignees) : [],
       priority: task?.priority ?? 'medium',
       status: task?.status ?? defaultStatus ?? 'todo',
       estimate: task?.estimate?.toString() ?? '',
@@ -128,6 +132,9 @@ export function TaskFormModal({
 
   const mutation = useMutation({
     mutationFn: (values: TaskValues) => {
+      const requestedStatus = values.status as TaskStatus;
+      const status = resolveStatusUpdate(requestedStatus, user?.role);
+
       const payload: TaskInput = {
         title: values.title,
         description: values.description || undefined,
@@ -135,7 +142,7 @@ export function TaskFormModal({
         sprint: values.sprint,
         assignees: values.assignees ?? [],
         priority: values.priority,
-        status: values.status,
+        status,
         dueDate: values.dueDate || undefined,
         estimate: values.estimate ? Number(values.estimate) : undefined,
         tags: values.tags
@@ -144,9 +151,15 @@ export function TaskFormModal({
       };
       return isEdit ? updateTask(task!._id, payload) : createTask(payload);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      toast.success(isEdit ? 'Task updated' : 'Task created');
+    onSuccess: (_data, values) => {
+      const requested = values.status as TaskStatus;
+      const resolved = resolveStatusUpdate(requested, user?.role);
+      if (wasBlockedDoneAttempt(requested, resolved, user?.role)) {
+        toast('Sent to review — a manager must approve "done".');
+      } else {
+        toast.success(isEdit ? 'Task updated' : 'Task created');
+      }
+      invalidateTaskCaches(queryClient, isEdit ? task!._id : undefined);
       onClose();
     },
   });
