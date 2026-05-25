@@ -320,9 +320,10 @@ function projectLabel(project: Task['project']): string {
 }
 
 function sprintLabel(sprint: Task['sprint']): string {
+  console.log(sprint,'sprint')
   if (typeof sprint === 'string') return '—';
   const s = sprint as Sprint;
-  return `#${s.sprintNumber}`;
+  return `${s.title}`;
 }
 
 interface SortHeaderProps {

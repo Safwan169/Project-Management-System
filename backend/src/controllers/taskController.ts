@@ -152,7 +152,9 @@ export const getTasks = asyncHandler(async (req: Request, res: Response) => {
       .sort({ status: 1, order: 1, createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .populate('assignees', 'name avatar'),
+      .populate('assignees', 'name avatar')
+      .populate('project', 'name title')
+      .populate('sprint', 'name title'),
     Task.countDocuments(filter),
   ]);
 
